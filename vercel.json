@@ -1,8 +1,22 @@
 {
-    "rewrites": [
+    "builds": [
         {
-            "source": "/api/video-stream/:videoId",
-            "destination": "/api/video-stream"
+            "src": "index.html",
+            "use": "@vercel/static"
+        },
+        {
+            "src": "api/video-stream.js",
+            "use": "@vercel/node"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/video-stream/(?<videoId>[^/]+)",
+            "dest": "/api/video-stream.js?videoId=$videoId"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/$1"
         }
     ]
 }
