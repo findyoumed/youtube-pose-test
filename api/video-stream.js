@@ -1,44 +1,49 @@
-// [LOG: 20260327_1246] YouTube Proxy Entry Point
-// The client will now handle multiple fallbacks for better stability.
+// [LOG: 20260327_1345] Universal Video/CORS Proxy
+import fetch from "node-fetch";
 
 export default async function handler(req, res) {
-    const { videoId } = req.query;
+    const { videoId, url } = req.query;
 
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-
     if (req.method === "OPTIONS") return res.status(200).end();
 
-    if (!videoId || videoId.length !== 11) {
-        return res.status(400).json({ error: "Invalid video ID" });
+    // [Case 1] 일반 URL 프록시 (Google Drive 등 CORS 해결용)
+    if (url) {
+        try {
+            console.log(`📡 Proxying URL: ${url}`);
+            const response = await fetch(url, {
+                headers: { "User-Agent": "Mozilla/5.0" }
+            });
+
+            if (!response.ok) throw new Error(`Remote server responded with ${response.status}`);
+
+            // 헤더 복사 (Content-Type 등)
+            res.setHeader("Content-Type", response.headers.get("content-type") || "video/mp4");
+
+            // 스트림 파이핑 (Vercel 지원 한도 내)
+            return response.body.pipe(res);
+        } catch (e) {
+            console.error("Proxy error:", e.message);
+            return res.status(500).json({ error: "Failed to proxy video", details: e.message });
+        }
     }
 
-    // 서버 사이드에서는 Cobalt를 기본으로 시도하고, 
-    // 실패하더라도 클라이언트에서 여러 인스턴스를 추가 시도하도록 설계됨.
-    try {
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
+    // [Case 2] 기존 YouTube Proxy 로직 (ID 기반)
+    if (videoId && videoId.length === 11) {
+        // ... (기존 Cobalt/Invidious 로직 유지)
         const cobaltResponse = await fetch("https://api.cobalt.tools/api/json", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                "Accept": "application/json"
             },
-            body: JSON.stringify({ url: videoUrl, videoQuality: "720" })
+            body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${videoId}`, videoQuality: "720" })
         });
-
         const data = await cobaltResponse.json();
-
-        if (data && data.url) {
-            console.log(`✅ Cobalt success: ${videoId}`);
-            return res.redirect(302, data.url);
-        }
-    } catch (e) {
-        console.warn(`Cobalt failed in API: ${e.message}`);
+        if (data && data.url) return res.redirect(302, data.url);
+        return res.redirect(302, `https://inv.tux.rs/latest_version?id=${videoId}&itag=18`);
     }
 
-    // 만약 Cobalt가 실패하면 클라이언트에게 404를 내려주지 않고, 
-    // 기본 Invidious 주소로 첫 번째 시도를 유도합니다.
-    return res.redirect(302, `https://inv.tux.rs/latest_version?id=${videoId}&itag=18`);
+    return res.status(400).json({ error: "No valid URL or videoId provided" });
 }

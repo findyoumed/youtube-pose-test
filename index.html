@@ -4,62 +4,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Pose Tracker Pro (Local File)</title>
+    <title>AI Pose Tracker Pro v2.0</title>
+    <!-- [LOG: 20260327_1338] Premium Typography & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        /* [LOG: 20260327_1302] Final Clean Reliable UI */
+        :root {
+            --bg: #020617;
+            --card: rgba(30, 41, 59, 0.7);
+            --accent: #ef4444;
+            --accent-glow: rgba(239, 68, 68, 0.3);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
         }
 
         body {
-            background: #0f172a;
-            color: #f8fafc;
-            font-family: -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            min-height: 100vh;
+            padding: 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            min-height: 100vh;
-            padding: 20px;
         }
 
         .container {
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 24px;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         header {
             text-align: center;
-            margin-bottom: 5px;
         }
 
         h1 {
-            font-size: 26px;
+            font-size: 32px;
             font-weight: 800;
-            color: #ef4444;
-            letter-spacing: -0.5px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: -1px;
+            text-shadow: 0 0 20px var(--accent-glow);
         }
 
-        p {
+        h1 span {
+            color: #fff;
+        }
+
+        header p {
             font-size: 14px;
-            color: #94a3b8;
+            color: var(--text-muted);
             margin-top: 5px;
         }
 
-        /* 비디오 분석 창 */
         .preview-window {
             position: relative;
             width: 100%;
             aspect-ratio: 16/9;
-            background: #020617;
-            border-radius: 16px;
+            background: #000;
+            border-radius: 20px;
             overflow: hidden;
-            border: 2px solid #334155;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
         #mainVideo {
@@ -75,72 +103,109 @@
             width: 100%;
             height: 100%;
             pointer-events: none;
+            z-index: 10;
         }
 
-        /* 컨트롤 패널 */
+        #aiOverlay {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            padding: 8px 16px;
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+            z-index: 20;
+            display: none;
+        }
+
         .controls {
-            background: #1e293b;
+            background: var(--card);
+            backdrop-filter: blur(20px);
             padding: 24px;
-            border-radius: 16px;
-            border: 1px solid #475569;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 16px;
         }
 
-        /* 파일 선택 스타일링 */
-        .file-upload {
-            border: 2px dashed #475569;
+        #status {
+            padding: 14px;
             border-radius: 12px;
-            padding: 20px;
+            font-size: 14px;
+            font-weight: 600;
             text-align: center;
-            transition: all 0.2s;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #1e40af;
+            color: #60a5fa;
+            transition: all 0.3s;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .file-upload {
+            flex: 2;
+            min-width: 200px;
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 18px;
+            text-align: center;
             cursor: pointer;
+            transition: 0.3s;
         }
 
         .file-upload:hover {
-            border-color: #ef4444;
-            background: rgba(239, 68, 68, 0.05);
+            border-color: var(--accent);
+            background: var(--accent-glow);
         }
 
         input[type="file"] {
             display: none;
         }
 
-        .upload-label {
-            font-weight: 600;
-            color: #e2e8f0;
-            display: block;
-            cursor: pointer;
-        }
-
-        .upload-hint {
-            font-size: 12px;
-            color: #94a3b8;
-            margin-top: 5px;
-        }
-
-        #status {
+        .btn-action {
+            flex: 1;
+            background: #334155;
+            color: #fff;
+            border: none;
+            border-radius: 16px;
             padding: 12px;
-            border-radius: 10px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
-            text-align: center;
-            background: #0f172a;
-            border: 1px solid #1e40af;
-            color: #60a5fa;
+            cursor: pointer;
+            transition: 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        /* 로딩 애니메이션 */
+        .btn-action:hover {
+            background: #475569;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         .spinner {
             display: inline-block;
-            width: 12px;
-            height: 12px;
+            width: 14px;
+            height: 14px;
             border: 2px solid rgba(255, 255, 255, .3);
             border-radius: 50%;
             border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
+            animation: spin 0.8s linear infinite;
             margin-right: 8px;
+            vertical-align: middle;
         }
 
         @keyframes spin {
@@ -154,48 +219,47 @@
 <body>
     <div class="container">
         <header>
-            <h1>🏋️ AI Pose Tracker Pro</h1>
-            <p>유튜브 차단 걱정 없는 100% 확실한 로컬 영상 분석</p>
+            <h1>AI <span>Pose Tracker</span> Pro</h1>
+            <p>언제 어디서나, 당신의 움직임을 인공지능이 분석합니다</p>
         </header>
 
         <div class="preview-window">
             <video id="mainVideo" playsinline controls></video>
             <canvas id="poseCanvas"></canvas>
-            <!-- [LOG: 20260327_1328] DOM 기반 상태 표시기 추가 (캔버스 신뢰성 문제 해결) -->
-            <div id="aiOverlay"
-                style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 5px; font-size: 12px; color: #4ade80; pointer-events: none; border: 1px solid #4ade80; display: none;">
-                AI 탐색 중...
-            </div>
+            <div id="aiOverlay">🔍 인물 탐색 중...</div>
         </div>
 
         <div class="controls">
-            <div id="status">⏳ 모듈 초기화 중...</div>
+            <div id="status">⏳ 모듈 준비 중...</div>
 
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <label class="file-upload" id="dropZone" style="flex: 2; min-width: 200px;">
-                    <input type="file" id="videoInput" accept="video/*">
-                    <span class="upload-label">📁 영상 파일 선택</span>
-                </label>
-                <div style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
-                    <button onclick="window.toggleHardware()"
-                        style="width: 100%; background: #334155; color: #e2e8f0; font-size: 12px; padding: 10px; border-radius: 8px; border: 1px solid #475569; cursor: pointer;">
-                        ⚙️ 가속 모드 변경
-                    </button>
-                    <button onclick="window.testCanvas()"
-                        style="width: 100%; background: #1e293b; color: #94a3b8; font-size: 11px; padding: 5px; border-radius: 8px; border: 1px solid #334155; cursor: pointer;">
-                        🛠️ 화면 테스트
-                    </button>
-                </div>
+            <!-- [LOG: 20260327_1342] URL 분석 입력창 -->
+            <div class="btn-group"
+                style="background: rgba(15, 23, 42, 0.5); padding: 15px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
+                <input type="text" id="urlInput" placeholder="구글 드라이브나 영상 URL 입력"
+                    value="https://drive.google.com/file/d/1pgn-Edza6rW1AdpHajGdcMrethATvGUX/view?usp=sharing"
+                    style="flex: 1; min-width: 200px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; color: #fff; font-size: 13px; outline: none;">
+                <button class="btn-action" onclick="window.loadFromUrl()"
+                    style="flex: 0 0 80px; background: var(--accent); border-color: var(--accent);">분석</button>
             </div>
 
-            <p style="font-size: 11px; color: #64748b; text-align: center;">
-                💡 팁: 영상 재생 버튼을 눌러야 분석이 시작됩니다. (너무 느리면 가속 모드 변경)
-            </p>
+            <div class="btn-group">
+                <label class="file-upload">
+                    <input type="file" id="videoInput" accept="video/*">
+                    <span style="font-weight: 600; display: block;">📁 분석할 영상 선택</span>
+                    <span style="font-size: 12px; color: var(--text-muted);">갤러리 또는 파일함</span>
+                </label>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+                    <button class="btn-action" onclick="window.toggleHardware()">⚙️ 가속 모드 변경</button>
+                    <button class="btn-action btn-secondary" onclick="window.testCanvas()">🛠️ 화면 테스트</button>
+                </div>
+            </div>
         </div>
     </div>
 
+    <!-- [LOG: 20260327_1338] 최적화 전용 캔버스 -->
+    <canvas id="offscreenCanvas" style="display:none;"></canvas>
+
     <script type="module">
-        // [LOG: 20260327_1302] Final Reliable Local Analysis Engine
         let poseLandmarker = null;
         let poseConnections = null;
         let animFrameId = null;
@@ -203,63 +267,70 @@
         const mainVideo = document.getElementById("mainVideo");
         const poseCanvas = document.getElementById("poseCanvas");
         const videoInput = document.getElementById("videoInput");
+        const urlInput = document.getElementById("urlInput");
         const statusEl = document.getElementById("status");
         const aiOverlay = document.getElementById("aiOverlay");
         const ctx = poseCanvas.getContext("2d");
+        const offscreenCanvas = document.getElementById("offscreenCanvas");
+        const offCtx = offscreenCanvas.getContext("2d");
 
-        // [LOG: 20260327_1328] 시스템 테스트 기능 (캔버스 정상 출력 확인용)
-        window.testCanvas = () => {
-            console.log("Canvas testing...");
-            ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-            ctx.strokeStyle = "#ff0000";
-            ctx.lineWidth = 10;
-            ctx.strokeRect(20, 20, poseCanvas.width - 40, poseCanvas.height - 40);
-            ctx.fillStyle = "#ff0000";
-            ctx.font = "bold 30px sans-serif";
-            ctx.fillText("CANVAS TEST: OK", 50, 80);
-            alert("화면에 빨간색 사각형과 글씨가 보이시나요? 안 보인다면 브라우저 설정 문제입니다.");
+        // [URL 로드 로직]
+        window.loadFromUrl = () => {
+            let url = urlInput.value.trim();
+            if (!url) return alert("URL을 입력해 주세요.");
+            statusEl.innerHTML = '<span class="spinner"></span> 외부 영상 로딩 중...';
+
+            if (url.includes("drive.google.com")) {
+                const match = url.match(/\/d\/([^/]+)/) || url.match(/id=([^&]+)/);
+                if (match && match[1]) url = `https://drive.google.com/uc?export=download&id=${match[1]}`;
+            }
+            // [로그: 20260327_1345] CORS 및 403 차단을 피하기 위해 서버 프록시 사용
+            const proxyUrl = `/api/video-stream?url=${encodeURIComponent(url)}`;
+            console.log("Loading via proxy:", proxyUrl);
+
+            mainVideo.crossOrigin = "anonymous";
+            mainVideo.src = proxyUrl;
+            mainVideo.load();
+            mainVideo.onerror = () => {
+                statusEl.textContent = "❌ 영상 로드 실패. 링크를 확인해 주세요.";
+                statusEl.style.color = "#ef4444";
+            };
         };
 
-        // 1. 파일 선택 처리
+        // [파일 선택 로직]
         videoInput.addEventListener("change", (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
-            const url = URL.createObjectURL(file);
-            mainVideo.src = url;
+            mainVideo.crossOrigin = null;
+            mainVideo.src = URL.createObjectURL(file);
             mainVideo.load();
-
-            statusEl.innerHTML = '<span class="spinner"></span> 영상 로딩 중...';
-
-            mainVideo.onloadeddata = () => {
-                statusEl.textContent = "🦴 영상 로드 완료. 재생을 눌러주세요.";
-                statusEl.style.borderColor = "#059669";
-                statusEl.style.color = "#34d399";
-
-                poseCanvas.width = mainVideo.videoWidth;
-                poseCanvas.height = mainVideo.videoHeight;
-
-                if (animFrameId) cancelAnimationFrame(animFrameId);
-                startLoop();
-
-                mainVideo.play().catch(e => console.warn("Auto-play blocked:", e));
-            };
+            statusEl.innerHTML = '<span class="spinner"></span> 영상 로드 중...';
         });
 
-        // 2. 인공지능 초기화
+        // [공통 로드 완료]
+        mainVideo.onloadeddata = () => {
+            if (!mainVideo.src) return;
+            poseCanvas.width = mainVideo.videoWidth;
+            poseCanvas.height = mainVideo.videoHeight;
+            offscreenCanvas.width = 640;
+            offscreenCanvas.height = 480;
+
+            statusEl.textContent = "✅ 로드 완료. 재생을 눌러 분석을 시작하세요!";
+            statusEl.style.borderColor = "#4ade80";
+            statusEl.style.color = "#4ade80";
+
+            if (animFrameId) cancelAnimationFrame(animFrameId);
+            startLoop();
+            mainVideo.play().catch(() => { });
+        };
+
+        // [AI 초기화]
         async function initAI(delegateType = "GPU") {
             try {
-                if (poseLandmarker) {
-                    await poseLandmarker.close();
-                    poseLandmarker = null;
-                }
-
-                statusEl.innerHTML = `<span class="spinner"></span> AI 모듈(${delegateType}) 설정 중...`;
-
+                if (poseLandmarker) { await poseLandmarker.close(); poseLandmarker = null; }
+                statusEl.innerHTML = `<span class="spinner"></span> AI 로딩(${delegateType})...`;
                 const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
                 const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
-
-                // [LOG: 20260327_1334] 성능을 위해 Lite 모델로 복구 (1초 지연 해결)
                 poseLandmarker = await vision.PoseLandmarker.createFromOptions(resolver, {
                     baseOptions: {
                         modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
@@ -268,37 +339,36 @@
                     runningMode: "VIDEO", numPoses: 1
                 });
                 poseConnections = vision.PoseLandmarker.POSE_CONNECTIONS;
-
-                statusEl.textContent = `✅ AI (${delegateType}) 준비 완료!`;
-                console.log(`MediaPipe Full initialized with ${delegateType}`);
+                statusEl.textContent = `✅ AI (${delegateType} 모드) 준비 완료!`;
             } catch (e) {
                 statusEl.textContent = `❌ AI 로드 실패 (${delegateType})`;
                 console.error(e);
             }
         }
 
-        // 전역 함수 등록
-        window.toggleHardware = async function () {
+        window.toggleHardware = async () => {
             const current = statusEl.textContent.includes("GPU") ? "CPU" : "GPU";
             await initAI(current);
         };
 
-        // 3. 실시간 분석 루프
-        let lastTime = -1;
+        window.testCanvas = () => {
+            ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 10;
+            ctx.strokeRect(20, 20, poseCanvas.width - 40, poseCanvas.height - 40);
+            alert("빨간 사각형이 보이면 정상입니다.");
+        };
+
         function startLoop() {
             function loop() {
                 if (mainVideo.readyState >= 2 && !mainVideo.paused && poseLandmarker) {
                     try {
                         const now = performance.now();
-                        if (now - lastTime < 40) { // 25fps로 더 낮춤 (안정성)
-                            animFrameId = requestAnimationFrame(loop);
-                            return;
-                        }
+                        if (now - lastTime < 40) { animFrameId = requestAnimationFrame(loop); return; }
                         lastTime = now;
-
-                        const result = poseLandmarker.detectForVideo(mainVideo, now);
+                        offCtx.drawImage(mainVideo, 0, 0, 640, 480);
+                        const result = poseLandmarker.detectForVideo(offscreenCanvas, now);
                         ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-
                         if (result.landmarks && result.landmarks.length > 0) {
                             drawPose(result.landmarks[0]);
                             aiOverlay.style.display = "none";
@@ -306,21 +376,22 @@
                             aiOverlay.textContent = "🔍 인물 찾는 중...";
                             aiOverlay.style.display = "block";
                         }
-                    } catch (err) {
-                        console.error("Detection error:", err);
-                    }
+                    } catch (err) { console.error(err); }
                 }
+                lastTime = performance.now();
                 animFrameId = requestAnimationFrame(loop);
             }
+            let lastTime = -1;
             animFrameId = requestAnimationFrame(loop);
         }
 
         function drawPose(landmarks) {
             ctx.save();
             ctx.strokeStyle = "#4ade80";
-            ctx.lineWidth = 3;
-
-            // 1. 선 그리기 (필터 제거: 무조건 그림)
+            ctx.lineWidth = 4;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "rgba(74, 222, 128, 0.5)";
+            let detectedCount = 0;
             poseConnections.forEach(c => {
                 const s = landmarks[c.start], e = landmarks[c.end];
                 ctx.beginPath();
@@ -328,20 +399,19 @@
                 ctx.lineTo(e.x * poseCanvas.width, e.y * poseCanvas.height);
                 ctx.stroke();
             });
-
-            // 2. 점 그리기
             landmarks.forEach((p, idx) => {
+                if (p.visibility > 0.2) detectedCount++;
                 ctx.beginPath();
-                ctx.arc(p.x * poseCanvas.width, p.y * poseCanvas.height, 4, 0, 2 * Math.PI);
-                ctx.fillStyle = (p.visibility > 0.5) ? "#ef4444" : "#3b82f6"; // 신뢰도 낮으면 파란색
+                ctx.arc(p.x * poseCanvas.width, p.y * poseCanvas.height, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = (p.visibility > 0.5) ? "#ef4444" : "#3b82f6";
                 ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 1;
+                ctx.stroke();
             });
-
-            // 3. 상태 표시 및 디버그
-            const avgVis = landmarks.reduce((sum, p) => sum + p.visibility, 0) / 33;
             ctx.fillStyle = "#4ade80";
-            ctx.font = "bold 14px sans-serif";
-            ctx.fillText(`✅ 분석 중 (평균 신뢰도: ${avgVis.toFixed(2)})`, 10, 25);
+            ctx.font = "bold 15px sans-serif";
+            ctx.fillText(`✅ 분석 중 (관절 ${detectedCount}개)`, 15, 30);
             ctx.restore();
         }
 

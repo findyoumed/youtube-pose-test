@@ -46,58 +46,86 @@ function getStreamUrl(videoId) {
     });
 }
 
-// YouTube 영상 프록시 엔드포인트
+// YouTube 영상 프록시 엔드포인트 (Legacy 정규식 매칭)
 app.get("/api/video-stream/:videoId", function (req, res) {
     var videoId = req.params.videoId;
-
     if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
         res.status(400).json({ error: "Invalid video ID" });
         return;
     }
+    handleYouTubeProxy(videoId, res, req);
+});
 
-    console.log("Proxy request for:", videoId);
+// [LOG: 20260327_1350] 리다이렉트를 추적하는 범용 프록시
+app.get("/api/video-stream", function (req, res) {
+    var url = req.query.url;
+    if (!url) return res.status(400).json({ error: "No URL provided" });
 
+    if (url.includes("drive.google.com")) {
+        var match = url.match(/\/d\/([^/]+)/) || url.match(/id=([^&]+)/);
+        if (match && match[1]) url = "https://drive.google.com/uc?export=download&id=" + match[1];
+    }
+
+    console.log("Proxying (Follow Redirects):", url);
+
+    function fetchWithRedirect(targetUrl, depth) {
+        if (depth > 5) {
+            res.status(500).json({ error: "Too many redirects" });
+            return;
+        }
+
+        var protocol = targetUrl.startsWith("https") ? https : http;
+        protocol.get(targetUrl, {
+            headers: { "User-Agent": "Mozilla/5.0" }
+        }, function (proxyRes) {
+            // 리다이렉트 처리 (301, 302)
+            if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+                var nextUrl = proxyRes.headers.location;
+                if (!nextUrl.startsWith("http")) { // 상대 경로 처리
+                    var origin = new URL(targetUrl).origin;
+                    nextUrl = origin + nextUrl;
+                }
+                console.log("Redirecting to:", nextUrl);
+                fetchWithRedirect(nextUrl, depth + 1);
+                return;
+            }
+
+            // 최종 응답 파이핑
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", proxyRes.headers["content-type"] || "video/mp4");
+            if (proxyRes.headers["content-length"]) res.setHeader("Content-Length", proxyRes.headers["content-length"]);
+            if (proxyRes.headers["accept-ranges"]) res.setHeader("Accept-Ranges", proxyRes.headers["accept-ranges"]);
+
+            proxyRes.pipe(res);
+            req.on("close", function () { proxyRes.destroy(); });
+        }).on("error", function (err) {
+            if (!res.headersSent) res.status(500).json({ error: err.message });
+        });
+    }
+
+    fetchWithRedirect(url, 0);
+});
+
+// 기존 YouTube 로직 모듈화
+function handleYouTubeProxy(videoId, res, req) {
     getStreamUrl(videoId).then(function (streamUrl) {
-        console.log("DEBUG: Got stream URL, proxying...");
-
         var protocol = streamUrl.startsWith("https") ? https : http;
-
         protocol.get(streamUrl, {
             headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0",
                 "Referer": "https://www.youtube.com/",
                 "Origin": "https://www.youtube.com"
             }
         }, function (proxyRes) {
             res.setHeader("Content-Type", proxyRes.headers["content-type"] || "video/mp4");
-            res.setHeader("Accept-Ranges", "bytes");
             res.setHeader("Access-Control-Allow-Origin", "*");
-            res.setHeader("Cache-Control", "public, max-age=60");
-
-            if (proxyRes.headers["content-length"]) {
-                res.setHeader("Content-Length", proxyRes.headers["content-length"]);
-            }
-
             proxyRes.pipe(res);
-
-            req.on("close", function () {
-                proxyRes.destroy();
-            });
-
-        }).on("error", function (err) {
-            console.error("Proxy stream error:", err.message);
-            if (!res.headersSent) {
-                res.status(500).json({ error: "Stream failed: " + err.message });
-            }
+            req.on("close", function () { proxyRes.destroy(); });
         });
-
     }).catch(function (err) {
-        console.error("!!! PROXY ERROR !!!", err.message);
-        if (!res.headersSent) {
-            res.status(500).json({ error: err.message });
-        }
+        res.status(500).json({ error: err.message });
     });
-});
+}
 
 app.listen(PORT, function () {
     console.log("=================================");
