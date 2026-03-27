@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI YouTube Pose Tracker (Multi-Proxy)</title>
+    <title>AI Pose Tracker Pro (Local File)</title>
     <style>
-        /* [LOG: 20260327_1246] Multi-Proxy Failover UI */
+        /* [LOG: 20260327_1302] Final Clean Reliable UI */
         * {
             margin: 0;
             padding: 0;
@@ -26,30 +26,40 @@
 
         .container {
             width: 100%;
-            max-width: 700px;
+            max-width: 800px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 20px;
         }
 
         header {
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
         }
 
         h1 {
-            font-size: 22px;
+            font-size: 26px;
+            font-weight: 800;
             color: #ef4444;
+            letter-spacing: -0.5px;
         }
 
-        .video-box {
+        p {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+
+        /* 비디오 분석 창 */
+        .preview-window {
             position: relative;
             width: 100%;
             aspect-ratio: 16/9;
-            background: #000;
-            border-radius: 12px;
+            background: #020617;
+            border-radius: 16px;
             overflow: hidden;
-            border: 1px solid #334155;
+            border: 2px solid #334155;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
         }
 
         #mainVideo {
@@ -67,72 +77,76 @@
             pointer-events: none;
         }
 
-        .panel {
+        /* 컨트롤 패널 */
+        .controls {
             background: #1e293b;
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid #334155;
-        }
-
-        .input-row {
+            padding: 24px;
+            border-radius: 16px;
+            border: 1px solid #475569;
             display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
+            flex-direction: column;
+            gap: 15px;
         }
 
-        input {
-            flex: 1;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #334155;
-            background: #0f172a;
-            color: #fff;
-            outline: none;
-        }
-
-        button {
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-weight: 700;
-            cursor: pointer;
+        /* 파일 선택 스타일링 */
+        .file-upload {
+            border: 2px dashed #475569;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
             transition: all 0.2s;
+            cursor: pointer;
         }
 
-        .btn-main {
-            background: #ef4444;
-            color: white;
-            width: 100%;
-            font-size: 16px;
+        .file-upload:hover {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.05);
         }
 
-        .btn-main:disabled {
-            background: #475569;
-            opacity: 0.6;
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-label {
+            font-weight: 600;
+            color: #e2e8f0;
+            display: block;
+            cursor: pointer;
+        }
+
+        .upload-hint {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 5px;
         }
 
         #status {
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 13px;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
             text-align: center;
-            margin-bottom: 10px;
             background: #0f172a;
-            border: 1px solid #1d4ed833;
+            border: 1px solid #1e40af;
+            color: #60a5fa;
         }
 
-        #log {
-            font-family: monospace;
-            font-size: 11px;
-            color: #94a3b8;
-            height: 100px;
-            overflow-y: auto;
-            background: #000;
-            padding: 10px;
-            border-radius: 8px;
-            white-space: pre-wrap;
-            margin-top: 10px;
-            border: 1px solid #222;
+        /* 로딩 애니메이션 */
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255, 255, 255, .3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
@@ -140,128 +154,108 @@
 <body>
     <div class="container">
         <header>
-            <h1>🏋️ AI YouTube Pose Tracker</h1>
-            <p style="font-size:12px; color:#64748b;">다중 우회 경로를 이용한 모바일/PC 통합 분석기</p>
+            <h1>🏋️ AI Pose Tracker Pro</h1>
+            <p>유튜브 차단 걱정 없는 100% 확실한 로컬 영상 분석</p>
         </header>
 
-        <div class="video-box">
-            <video id="mainVideo" crossorigin="anonymous" playsinline controls></video>
+        <div class="preview-window">
+            <video id="mainVideo" playsinline controls></video>
             <canvas id="poseCanvas"></canvas>
         </div>
 
-        <div class="panel">
-            <div id="status">🤖 인공지능 모듈 준비 중...</div>
-            <div class="input-row">
-                <input type="text" id="videoIdInput" placeholder="유튜브 ID 입력 (11자리)" value="8a9M0lNY37s">
-            </div>
-            <button id="btnStart" class="btn-main" onclick="startAnalysis()" disabled>🚀 분석 시작</button>
-        </div>
+        <div class="controls">
+            <div id="status">⏳ 모듈 초기화 중...</div>
 
-        <div id="log"></div>
+            <label class="file-upload" id="dropZone">
+                <input type="file" id="videoInput" accept="video/*">
+                <span class="upload-label">📁 분석할 영상 파일 선택 (또는 드래그)</span>
+                <span class="upload-hint">MP4, MOV, WebM 등 모든 영상 지원</span>
+            </label>
+
+            <p style="font-size: 11px; color: #64748b; text-align: center;">
+                💡 팁: 유튜브 영상을 다운로드한 뒤 선택하면 가장 정확하게 분석됩니다.
+            </p>
+        </div>
     </div>
 
     <script type="module">
-        // [LOG: 20260327_1246] Client-Side Multi-Proxy Hopping Engine
-
-        // 1. 시도해볼 우회 서버 목록 (Invidious 인스턴스들)
-        const PROXY_LIST = [
-            "/api/video-stream/", // 우리 Vercel 서버 (Cobalt 시도)
-            "https://inv.tux.rs/latest_version?id=",
-            "https://invidious.snopyta.org/latest_version?id=",
-            "https://invidious.namazso.eu/latest_version?id=",
-            "https://invidious.tiekoetter.com/latest_version?id=",
-            "https://vid.plus.ee/latest_version?id="
-        ];
-
+        // [LOG: 20260327_1302] Final Reliable Local Analysis Engine
         let poseLandmarker = null;
         let poseConnections = null;
         let animFrameId = null;
 
         const mainVideo = document.getElementById("mainVideo");
         const poseCanvas = document.getElementById("poseCanvas");
+        const videoInput = document.getElementById("videoInput");
         const statusEl = document.getElementById("status");
-        const btnStart = document.getElementById("btnStart");
         const ctx = poseCanvas.getContext("2d");
 
-        function log(msg) {
-            console.log(msg);
-            const logEl = document.getElementById("log");
-            const time = new Date().toLocaleTimeString();
-            logEl.innerHTML = `[${time}] ${msg}\n` + logEl.innerHTML;
-        }
+        // 1. 파일 선택 처리
+        videoInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        // 전역 노출
-        window.startAnalysis = async function () {
-            const id = document.getElementById("videoIdInput").value.trim();
-            if (id.length !== 11) return alert("올바른 유튜브 ID를 입력하세요.");
-
-            btnStart.disabled = true;
-            statusEl.textContent = "⏳ 경로 우회 중... (최대 5개 서버 시도)";
-            log(`⚡ 분석 시작 요청: ${id}`);
-
-            // 다중 경로 시도 루프 시작
-            tryProxy(id, 0);
-        };
-
-        async function tryProxy(videoId, index) {
-            if (index >= PROXY_LIST.length) {
-                log("❌ 모든 우회 경로가 차단되었습니다. 잠시 후 다시 시도해 주세요.");
-                statusEl.textContent = "❌ 모든 서버 응답 없음";
-                statusEl.style.color = "#f87171";
-                btnStart.disabled = false;
-                return;
-            }
-
-            const proxyBase = PROXY_LIST[index];
-            const testUrl = proxyBase.startsWith("/") ? `${proxyBase}${videoId}` : `${proxyBase}${videoId}&itag=18`;
-
-            log(`🔄 경로 #${index + 1} 시도 중: ${proxyBase.split('/')[2] || 'Vercel API'}`);
-
-            // 타임아웃 처리 (한 서버당 최대 5초)
-            const timeoutId = setTimeout(() => {
-                log(`⚠️ 경로 #${index + 1} 응답 지연 → 다음 경로로 점프`);
-                mainVideo.onloadeddata = null;
-                mainVideo.onerror = null;
-                tryProxy(videoId, index + 1);
-            }, 5000);
-
-            mainVideo.src = testUrl;
+            // 로컬 파일 URL 생성 (서버 업로드 없음)
+            const url = URL.createObjectURL(file);
+            mainVideo.src = url;
             mainVideo.load();
 
-            mainVideo.onloadeddata = () => {
-                clearTimeout(timeoutId);
-                log(`✅ 경로 #${index + 1} 연결 성공!`);
-                statusEl.textContent = "🦴 실시간 포즈 감지 작동 중";
-                statusEl.style.color = "#4ade80";
-                btnStart.disabled = false;
+            statusEl.innerHTML = '<span class="spinner"></span> 영상 로딩 중...';
 
+            mainVideo.onloadeddata = () => {
+                statusEl.textContent = "🦴 실시간 포즈 감지 작동 중";
+                statusEl.style.borderColor = "#059669";
+                statusEl.style.color = "#34d399";
+
+                // 캔버스 크기 맞춤
                 poseCanvas.width = mainVideo.videoWidth;
                 poseCanvas.height = mainVideo.videoHeight;
 
                 if (animFrameId) cancelAnimationFrame(animFrameId);
                 startLoop();
             };
+        });
 
-            mainVideo.onerror = () => {
-                clearTimeout(timeoutId);
-                log(`🚫 경로 #${index + 1} 실패 (CORS 또는 503)`);
-                tryProxy(videoId, index + 1);
-            };
+        // 2. 인공지능 초기화
+        async function initAI() {
+            try {
+                const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
+                const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
+                poseLandmarker = await vision.PoseLandmarker.createFromOptions(resolver, {
+                    baseOptions: {
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+                        delegate: "GPU"
+                    },
+                    runningMode: "VIDEO", numPoses: 1
+                });
+                poseConnections = vision.PoseLandmarker.POSE_CONNECTIONS;
+
+                statusEl.textContent = "✅ 준비 완료! 영상을 선택해 주세요.";
+                console.log("MediaPipe initialized");
+            } catch (e) {
+                statusEl.textContent = "❌ AI 로드 실패";
+                console.error(e);
+            }
         }
 
+        // 3. 실시간 분석 루프
         function startLoop() {
             function loop() {
                 if (mainVideo.readyState >= 2 && !mainVideo.paused && poseLandmarker) {
                     try {
                         const result = poseLandmarker.detectForVideo(mainVideo, performance.now());
                         ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-                        if (result.landmarks && result.landmarks[0]) drawPose(result.landmarks[0]);
-                    } catch (e) {
-                        // CORS Tainted Canvas 에러 발생 시 로그
-                        if (e.message.includes("tainted")) {
-                            log("❌ 픽셀 보안 오류(CORS) 발생. 다른 경로를 찾습니다.");
-                            cancelAnimationFrame(animFrameId);
+
+                        if (result.landmarks && result.landmarks[0]) {
+                            drawPose(result.landmarks[0]);
+                        } else {
+                            // 감지 중임을 알리는 작은 표시
+                            ctx.fillStyle = "rgba(239, 68, 68, 0.5)";
+                            ctx.font = "12px sans-serif";
+                            ctx.fillText("🔍 인물 검색 중...", 10, 20);
                         }
+                    } catch (err) {
+                        console.error("Detection error:", err);
                     }
                 }
                 animFrameId = requestAnimationFrame(loop);
@@ -269,45 +263,36 @@
             animFrameId = requestAnimationFrame(loop);
         }
 
-        async function initAI() {
-            try {
-                const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
-                const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
-                poseLandmarker = await vision.PoseLandmarker.createFromOptions(resolver, {
-                    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task", delegate: "GPU" },
-                    runningMode: "VIDEO", numPoses: 1
-                });
-                poseConnections = vision.PoseLandmarker.POSE_CONNECTIONS;
-                statusEl.textContent = "✅ 준비 완료! 버튼을 눌러주세요.";
-                btnStart.disabled = false;
-                log("인공지능 로딩 완료");
-            } catch (e) {
-                statusEl.textContent = "❌ AI 모듈 로드 실패";
-                log(`에러: ${e.message}`);
-            }
-        }
-
         function drawPose(landmarks) {
             ctx.save();
             ctx.strokeStyle = "#4ade80";
             ctx.lineWidth = 4;
+
+            // 선 그리기 (임계값 0.5로 완화)
             poseConnections.forEach(c => {
                 const s = landmarks[c.start], e = landmarks[c.end];
-                if (s.visibility > 0.6 && e.visibility > 0.6) {
+                if ((s.visibility > 0.5) && (e.visibility > 0.5)) {
                     ctx.beginPath();
                     ctx.moveTo(s.x * poseCanvas.width, s.y * poseCanvas.height);
                     ctx.lineTo(e.x * poseCanvas.width, e.y * poseCanvas.height);
                     ctx.stroke();
                 }
             });
+
+            // 점 그리기 (임계값 0.5로 완화)
             landmarks.forEach((p, idx) => {
-                if (p.visibility > 0.6) {
+                if (p.visibility > 0.5) {
                     ctx.beginPath();
                     ctx.arc(p.x * poseCanvas.width, p.y * poseCanvas.height, 5, 0, 2 * Math.PI);
                     ctx.fillStyle = idx % 2 === 0 ? "#ef4444" : "#fff";
                     ctx.fill();
                 }
             });
+
+            // 분석 중 텍스트 표시
+            ctx.fillStyle = "#4ade80";
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillText("✅ 분석 중", 10, 25);
             ctx.restore();
         }
 
