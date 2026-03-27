@@ -1,0 +1,8 @@
+{
+    "rewrites": [
+        {
+            "source": "/api/video-stream/:videoId",
+            "destination": "/api/video-stream?videoId=:videoId"
+        }
+    ]
+}
