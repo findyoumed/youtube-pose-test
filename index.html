@@ -161,24 +161,35 @@
         <div class="preview-window">
             <video id="mainVideo" playsinline controls></video>
             <canvas id="poseCanvas"></canvas>
+            <!-- [LOG: 20260327_1328] DOM 기반 상태 표시기 추가 (캔버스 신뢰성 문제 해결) -->
+            <div id="aiOverlay"
+                style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 5px; font-size: 12px; color: #4ade80; pointer-events: none; border: 1px solid #4ade80; display: none;">
+                AI 탐색 중...
+            </div>
         </div>
 
         <div class="controls">
             <div id="status">⏳ 모듈 초기화 중...</div>
 
-            <div style="display: flex; gap: 10px;">
-                <label class="file-upload" id="dropZone" style="flex: 1;">
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <label class="file-upload" id="dropZone" style="flex: 2; min-width: 200px;">
                     <input type="file" id="videoInput" accept="video/*">
                     <span class="upload-label">📁 영상 파일 선택</span>
                 </label>
-                <button onclick="toggleHardware()"
-                    style="background: #334155; color: #94a3b8; font-size: 11px; padding: 10px;">
-                    ⚙️ 가속 모드 변경
-                </button>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+                    <button onclick="window.toggleHardware()"
+                        style="width: 100%; background: #334155; color: #e2e8f0; font-size: 12px; padding: 10px; border-radius: 8px; border: 1px solid #475569; cursor: pointer;">
+                        ⚙️ 가속 모드 변경
+                    </button>
+                    <button onclick="window.testCanvas()"
+                        style="width: 100%; background: #1e293b; color: #94a3b8; font-size: 11px; padding: 5px; border-radius: 8px; border: 1px solid #334155; cursor: pointer;">
+                        🛠️ 화면 테스트
+                    </button>
+                </div>
             </div>
 
             <p style="font-size: 11px; color: #64748b; text-align: center;">
-                💡 팁: 영상이 너무 느리다면 '가속 모드 변경'을 눌러보세요.
+                💡 팁: 영상 재생 버튼을 눌러야 분석이 시작됩니다. (너무 느리면 가속 모드 변경)
             </p>
         </div>
     </div>
@@ -193,14 +204,27 @@
         const poseCanvas = document.getElementById("poseCanvas");
         const videoInput = document.getElementById("videoInput");
         const statusEl = document.getElementById("status");
+        const aiOverlay = document.getElementById("aiOverlay");
         const ctx = poseCanvas.getContext("2d");
+
+        // [LOG: 20260327_1328] 시스템 테스트 기능 (캔버스 정상 출력 확인용)
+        window.testCanvas = () => {
+            console.log("Canvas testing...");
+            ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+            ctx.strokeStyle = "#ff0000";
+            ctx.lineWidth = 10;
+            ctx.strokeRect(20, 20, poseCanvas.width - 40, poseCanvas.height - 40);
+            ctx.fillStyle = "#ff0000";
+            ctx.font = "bold 30px sans-serif";
+            ctx.fillText("CANVAS TEST: OK", 50, 80);
+            alert("화면에 빨간색 사각형과 글씨가 보이시나요? 안 보인다면 브라우저 설정 문제입니다.");
+        };
 
         // 1. 파일 선택 처리
         videoInput.addEventListener("change", (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
-            // 로컬 파일 URL 생성 (서버 업로드 없음)
             const url = URL.createObjectURL(file);
             mainVideo.src = url;
             mainVideo.load();
@@ -208,51 +232,65 @@
             statusEl.innerHTML = '<span class="spinner"></span> 영상 로딩 중...';
 
             mainVideo.onloadeddata = () => {
-                statusEl.textContent = "🦴 실시간 포즈 감지 작동 중";
+                statusEl.textContent = "🦴 영상 로드 완료. 재생을 눌러주세요.";
                 statusEl.style.borderColor = "#059669";
                 statusEl.style.color = "#34d399";
 
-                // 캔버스 크기 맞춤
                 poseCanvas.width = mainVideo.videoWidth;
                 poseCanvas.height = mainVideo.videoHeight;
 
                 if (animFrameId) cancelAnimationFrame(animFrameId);
                 startLoop();
+
+                mainVideo.play().catch(e => console.warn("Auto-play blocked:", e));
             };
         });
 
         // 2. 인공지능 초기화
-        async function initAI() {
+        async function initAI(delegateType = "GPU") {
             try {
+                if (poseLandmarker) {
+                    await poseLandmarker.close();
+                    poseLandmarker = null;
+                }
+
+                statusEl.innerHTML = `<span class="spinner"></span> AI 모듈(${delegateType}) 설정 중...`;
+
                 const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
                 const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
+
+                // [LOG: 20260327_1334] 성능을 위해 Lite 모델로 복구 (1초 지연 해결)
                 poseLandmarker = await vision.PoseLandmarker.createFromOptions(resolver, {
                     baseOptions: {
                         modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-                        delegate: "GPU"
+                        delegate: delegateType
                     },
                     runningMode: "VIDEO", numPoses: 1
                 });
                 poseConnections = vision.PoseLandmarker.POSE_CONNECTIONS;
 
-                statusEl.textContent = "✅ 준비 완료! 영상을 선택해 주세요.";
-                console.log("MediaPipe initialized");
+                statusEl.textContent = `✅ AI (${delegateType}) 준비 완료!`;
+                console.log(`MediaPipe Full initialized with ${delegateType}`);
             } catch (e) {
-                statusEl.textContent = "❌ AI 로드 실패";
+                statusEl.textContent = `❌ AI 로드 실패 (${delegateType})`;
                 console.error(e);
             }
         }
+
+        // 전역 함수 등록
+        window.toggleHardware = async function () {
+            const current = statusEl.textContent.includes("GPU") ? "CPU" : "GPU";
+            await initAI(current);
+        };
 
         // 3. 실시간 분석 루프
         let lastTime = -1;
         function startLoop() {
             function loop() {
-                // 영상이 로드되고 재생 중일 때만 실행
                 if (mainVideo.readyState >= 2 && !mainVideo.paused && poseLandmarker) {
                     try {
                         const now = performance.now();
-                        // 30fps 정도로 조절 (CPU 부하 감소)
-                        if (now - lastTime < 33) {
+                        if (now - lastTime < 40) { // 25fps로 더 낮춤 (안정성)
                             animFrameId = requestAnimationFrame(loop);
                             return;
                         }
@@ -263,11 +301,10 @@
 
                         if (result.landmarks && result.landmarks.length > 0) {
                             drawPose(result.landmarks[0]);
+                            aiOverlay.style.display = "none";
                         } else {
-                            // 감지 중임을 알리는 작은 표시
-                            ctx.fillStyle = "#fbbf24";
-                            ctx.font = "12px sans-serif";
-                            ctx.fillText("🔍 인물 검색 중... (영상을 재생해 주세요)", 10, 20);
+                            aiOverlay.textContent = "🔍 인물 찾는 중...";
+                            aiOverlay.style.display = "block";
                         }
                     } catch (err) {
                         console.error("Detection error:", err);
@@ -281,36 +318,30 @@
         function drawPose(landmarks) {
             ctx.save();
             ctx.strokeStyle = "#4ade80";
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 3;
 
-            let detectedCount = 0;
-
-            // 선 그리기 (임계값 0.4로 더 낮춤)
+            // 1. 선 그리기 (필터 제거: 무조건 그림)
             poseConnections.forEach(c => {
                 const s = landmarks[c.start], e = landmarks[c.end];
-                if (s.visibility > 0.4 && e.visibility > 0.4) {
-                    ctx.beginPath();
-                    ctx.moveTo(s.x * poseCanvas.width, s.y * poseCanvas.height);
-                    ctx.lineTo(e.x * poseCanvas.width, e.y * poseCanvas.height);
-                    ctx.stroke();
-                }
+                ctx.beginPath();
+                ctx.moveTo(s.x * poseCanvas.width, s.y * poseCanvas.height);
+                ctx.lineTo(e.x * poseCanvas.width, e.y * poseCanvas.height);
+                ctx.stroke();
             });
 
-            // 점 그리기
+            // 2. 점 그리기
             landmarks.forEach((p, idx) => {
-                if (p.visibility > 0.4) {
-                    detectedCount++;
-                    ctx.beginPath();
-                    ctx.arc(p.x * poseCanvas.width, p.y * poseCanvas.height, 5, 0, 2 * Math.PI);
-                    ctx.fillStyle = idx % 2 === 0 ? "#ef4444" : "#fff";
-                    ctx.fill();
-                }
+                ctx.beginPath();
+                ctx.arc(p.x * poseCanvas.width, p.y * poseCanvas.height, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = (p.visibility > 0.5) ? "#ef4444" : "#3b82f6"; // 신뢰도 낮으면 파란색
+                ctx.fill();
             });
 
-            // 상태 표시
+            // 3. 상태 표시 및 디버그
+            const avgVis = landmarks.reduce((sum, p) => sum + p.visibility, 0) / 33;
             ctx.fillStyle = "#4ade80";
             ctx.font = "bold 14px sans-serif";
-            ctx.fillText(`✅ 분석 중 (관절 ${detectedCount}개 감지)`, 10, 25);
+            ctx.fillText(`✅ 분석 중 (평균 신뢰도: ${avgVis.toFixed(2)})`, 10, 25);
             ctx.restore();
         }
 
