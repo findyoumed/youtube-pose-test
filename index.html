@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Pose Detection Test</title>
+    <title>YouTube Pose Detection (Smart Capture)</title>
     <style>
-        /* [LOG: 20260327_1205] Bookmarklet Login UI 추가 */
+        /* [LOG: 20260327_1224] Smart Screen Capture UI 개편 */
         * {
             margin: 0;
             padding: 0;
@@ -16,7 +16,7 @@
         body {
             background: #111;
             color: #fff;
-            font-family: Arial, sans-serif;
+            font-family: 'Inter', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -25,39 +25,39 @@
         }
 
         h1 {
-            margin-bottom: 10px;
-            font-size: 20px;
+            margin-bottom: 20px;
+            font-size: 24px;
+            font-weight: 700;
+            color: #FF0000;
         }
 
-        /* 비디오 컨테이너 */
-        .video-container {
+        /* 메인 컨테이너 */
+        .main-layout {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 900px;
+            gap: 20px;
+        }
+
+        /* 비디오 영역 */
+        .video-wrapper {
             position: relative;
             width: 640px;
             height: 360px;
             background: #000;
-            margin-bottom: 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
         }
 
-        /* YouTube IFrame 플레이어 */
         #player {
             width: 100%;
             height: 100%;
         }
 
-        /* 로컬 파일 비디오 (MediaPipe용) */
-        #localVideo {
-            width: 100%;
-            height: 100%;
-            display: none;
-            background: #000;
-        }
-
-        /* 프록시 비디오 (임시 객체) */
-        #proxyVideo {
-            display: none;
-        }
-
-        /* 포즈 오버레이 캔버스 */
         #poseCanvas {
             position: absolute;
             top: 0;
@@ -68,438 +68,418 @@
             z-index: 10;
         }
 
-        /* 상태 표시 */
-        #status {
-            margin-bottom: 10px;
-            padding: 10px 20px;
-            background: #222;
-            border-radius: 8px;
-            font-size: 14px;
-            min-width: 300px;
-            text-align: center;
-        }
-
-        .status-ok {
-            color: #4ade80;
-        }
-
-        .status-loading {
-            color: #facc15;
-        }
-
-        .status-error {
-            color: #f87171;
-        }
-
-        /* 모드 탭 */
-        .mode-tabs {
-            display: flex;
-            gap: 0;
-            margin-bottom: 15px;
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid #444;
-        }
-
-        .mode-tab {
-            padding: 10px 24px;
-            background: #222;
-            color: #aaa;
-            cursor: pointer;
-            font-size: 14px;
-            border: none;
-            border-radius: 0;
-        }
-
-        .mode-tab.active {
-            background: #2563eb;
-            color: #fff;
-        }
-
-        /* 패널 */
+        /* 상태 및 설정 패널 */
         .panel {
-            background: #222;
-            padding: 15px;
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 12px;
+            width: 100%;
+            border: 1px solid #333;
+        }
+
+        #status {
+            padding: 12px;
             border-radius: 8px;
-            margin-bottom: 15px;
-            width: 640px;
-        }
-
-        .panel label {
+            text-align: center;
+            font-weight: 600;
             font-size: 14px;
-            margin-right: 10px;
+            margin-bottom: 20px;
+            transition: all 0.3s;
         }
 
-        input[type="text"],
-        textarea {
-            padding: 8px;
-            border-radius: 4px;
-            border: 1px solid #444;
-            background: #111;
+        .status-ready {
+            background: #16a34a33;
+            color: #4ade80;
+            border: 1px solid #16a34a66;
+        }
+
+        .status-busy {
+            background: #2563eb33;
+            color: #60a5fa;
+            border: 1px solid #2563eb66;
+        }
+
+        .status-err {
+            background: #dc262633;
+            color: #f87171;
+            border: 1px solid #dc262666;
+        }
+
+        /* 입력 그룹 */
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        input {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #0b0b0b;
             color: #fff;
+            outline: none;
+            transition: border 0.3s;
+        }
+
+        input:focus {
+            border-color: #FF0000;
+        }
+
+        /* 버튼 */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
             font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: #FF0000;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #CC0000;
+            transform: translateY(-1px);
+        }
+
+        .btn-action {
+            background: #2563eb;
+            color: white;
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        .btn-action:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-action.active {
+            background: #dc2626;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* 도움말 */
+        .guide {
+            font-size: 13px;
+            color: #888;
+            line-height: 1.6;
+            margin-top: 15px;
+            padding: 15px;
+            background: #0b0b0b;
+            border-radius: 8px;
+            border-left: 4px solid #facc15;
+        }
+
+        .guide b {
+            color: #fff;
         }
 
         /* 로그 */
         #log {
-            width: 640px;
-            height: 120px;
-            background: #1a1a1a;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 12px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-        }
-
-        /* 북마크릿 버튼 스타일 */
-        .login-btn-container {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            align-items: center;
-            padding: 10px;
-        }
-
-        .bookmark-link {
-            display: inline-block;
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 30px;
-            font-weight: bold;
-            font-size: 15px;
-            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.3);
-            cursor: move;
-            transition: transform 0.2s;
-        }
-
-        .bookmark-link:hover {
-            transform: scale(1.05);
-        }
-
-        .step-box {
-            background: #333;
-            padding: 12px;
-            border-radius: 8px;
             width: 100%;
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        .step-box b {
-            color: #facc15;
-        }
-
-        .cookie-status {
-            font-size: 12px;
-            color: #888;
-            margin-top: 5px;
-        }
-
-        .success-badge {
-            background: #16a34a;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 4px;
+            height: 120px;
+            background: #000;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
             font-size: 11px;
-            margin-left: 5px;
+            overflow-y: auto;
+            opacity: 0.7;
+            margin-top: 20px;
+            border: 1px solid #222;
         }
 
-        button.main-action {
-            padding: 10px 20px;
-            background: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        button.main-action:hover {
-            background: #1d4ed8;
+        /* 숨겨진 도움체 */
+        #cropCanvas {
+            display: none;
         }
     </style>
 </head>
 
 <body>
-    <h1>🏋️ YouTube Pose Detection Test</h1>
+    <div class="main-layout">
+        <h1>🏋️ YouTube Smart AI Pose Detection</h1>
 
-    <!-- 상태 표시 -->
-    <div id="status" class="status-loading">⏳ 초기화 중...</div>
+        <div class="video-wrapper">
+            <div id="player"></div>
+            <canvas id="poseCanvas"></canvas>
+        </div>
 
-    <!-- 모드 선택 탭 -->
-    <div class="mode-tabs">
-        <button class="mode-tab active" id="tabYoutube" onclick="switchMode('youtube')">📺 YouTube 모드 (추천)</button>
-        <button class="mode-tab" id="tabFile" onclick="switchMode('file')">📁 내 영상 파일 모드</button>
-    </div>
+        <div class="panel">
+            <div id="status" class="status-ready">⏳ MediaPipe 준비 중...</div>
 
-    <!-- YouTube 모드 패널 -->
-    <div class="panel" id="panelYoutube">
-        <!-- 1. 로그인 단계 -->
-        <div class="login-btn-container">
-            <div class="step-box">
-                <b>1단계:</b> 아래 버튼을 <b>즐겨찾기 바(Bookmarks Bar)</b>로 끌어다 놓으세요.
+            <div class="input-group">
+                <input type="text" id="videoIdInput" placeholder="YouTube Video ID 입력 (예: 8a9M0lNY37s)"
+                    value="8a9M0lNY37s">
+                <button class="btn btn-primary" onclick="handleLoadVideo()">영상 로드</button>
             </div>
 
-            <a id="bookmarkletLink" class="bookmark-link" href="#"
-                onclick="alert('이 버튼을 즐겨찾기 바(상단 바)로 드래그해서 놓아주세요!'); return false;">
-                🔴 YouTube 로그인
-            </a>
+            <button id="btnCapture" class="btn btn-action" onclick="toggleAnalysis()" disabled>
+                🚀 스마트 분석 시작 (캡처 모드)
+            </button>
 
-            <div class="step-box">
-                <b>2단계:</b> <a href="https://www.youtube.com" target="_blank" style="color: #3b82f6;">유튜브</a>에 접속한 뒤,
-                위에서 추가한 <b>[🔴 YouTube 로그인] 즐겨찾기</b>를 클릭하세요.
-            </div>
-
-            <div id="cookieStatus" class="cookie-status">
-                상태: <span id="cookieValue">쿠키 없음 (로그인 필요)</span>
+            <div class="guide">
+                <b>💡 사용법 (로그인/쿠키 불필요):</b><br>
+                1. 보고 싶은 유튜브 영상을 로드합니다.<br>
+                2. <b>분석 시작</b> 버튼을 누르면 브라우저 팝업이 뜹니다.<br>
+                3. 상단 탭 목록에서 <b>[현재 탭 (이 페이지)]</b>을 선택하고 공유를 누르세요.<br>
+                4. 자동으로 유튜브 화면만 인식하여 포즈 분석이 시작됩니다! ✨
             </div>
         </div>
 
-        <hr style="border: 0; border-top: 1px solid #444; margin: 20px 0;">
-
-        <!-- 2. 영상 로드 단계 -->
-        <div style="display: flex; gap: 10px; align-items: center; justify-content: center;">
-            <label>Video ID:</label>
-            <input type="text" id="videoIdInput" value="8a9M0lNY37s" style="width: 150px;">
-            <button class="main-action" onclick="handleLoadVideo()">영상 로드 및 감지 시작</button>
-        </div>
+        <div id="log"></div>
     </div>
 
-    <!-- 파일 모드 패널 -->
-    <div class="panel" id="panelFile" style="display:none;">
-        <label>영상 파일 선택 (mp4, webm 등):</label><br><br>
-        <button onclick="document.getElementById('fileInput').click()" class="main-action"
-            style="background: #16a34a;">📂 파일 선택</button>
-        <input type="file" id="fileInput" accept="video/*" onchange="handleFileSelect(event)">
-        <div id="fileInfo" style="margin-top: 10px; color: #aaa; font-size: 13px;">파일을 선택하면 자동으로 포즈 감지가 시작됩니다.</div>
-    </div>
-
-    <!-- 비디오 + 포즈 캔버스 -->
-    <div class="video-container">
-        <div id="player"></div>
-        <video id="localVideo" controls playsinline></video>
-        <video id="proxyVideo" crossorigin="anonymous" playsinline style="display:none;"></video>
-        <canvas id="poseCanvas"></canvas>
-    </div>
-
-    <!-- 로그 -->
-    <div id="log"></div>
+    <!-- 분석을 위한 숨김 캔버스 (크롭용) -->
+    <canvas id="cropCanvas"></canvas>
 
     <script type="module">
-        // [LOG: 20260327_1205] Bookmarklet Login Logic
+        // [LOG: 20260327_1224] Smart Screen Capture Engine (Region Crop)
 
-        // ===== 1. URL 파라미터 체크 (북마크릿에서 돌아왔을 때) =====
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlCookie = urlParams.get("cookie");
-        if (urlCookie) {
-            localStorage.setItem("yt_cookie", urlCookie);
-            // URL 정화 (쿠키 노출 방지)
-            const cleanUrl = window.location.origin + window.location.pathname;
-            window.history.replaceState({}, document.title, cleanUrl);
-            console.log("✅ 북마크릿을 통해 쿠키가 성공적으로 갱신되었습니다.");
-        }
+        let VIDEO_ID = "8a9M0lNY37s";
+        let ytPlayer = null;
+        let poseLandmarker = null;
+        let poseConnections = null;
+        let analysisActive = false;
+        let captureStream = null;
+        let animFrameId = null;
 
-        // ===== 2. 북마크릿 링크 생성 =====
-        const currentOrigin = window.location.origin + window.location.pathname;
-        const jsCode = `javascript:(function(){
-            var c = document.cookie;
-            if(!c) { alert('유튜브에 먼저 로그인해주세요!'); return; }
-            window.location.href = "${currentOrigin}?cookie=" + encodeURIComponent(c);
-        })();`.replace(/\n/g, "");
-        document.getElementById("bookmarkletLink").href = jsCode;
-
-        // ===== 3. 쿠키 상태 표시 =====
-        function updateCookieUI() {
-            const hasCookie = !!localStorage.getItem("yt_cookie");
-            const valEl = document.getElementById("cookieValue");
-            if (hasCookie) {
-                valEl.innerHTML = "✅ 로그인 정보 저장됨 <span class='success-badge'>준비 완료</span>";
-                valEl.style.color = "#4ade80";
-            } else {
-                valEl.textContent = "❌ 쿠키 없음 (로그인 과정 진행 필요)";
-                valEl.style.color = "#f87171";
-            }
-        }
-        updateCookieUI();
-
-        // ===== 설정 & 상태 =====
-        var VIDEO_ID = "8a9M0lNY37s";
-        var currentMode = "youtube";
-        var ytPlayer = null;
-        var poseLandmarker = null;
-        var poseConnections = null;
-        var canvasCtx = document.getElementById("poseCanvas").getContext("2d");
-        var animFrameId = null;
-
-        const proxyVideo = document.getElementById("proxyVideo");
-        const localVideo = document.getElementById("localVideo");
+        const playerDiv = document.getElementById("player");
         const poseCanvas = document.getElementById("poseCanvas");
+        const cropCanvas = document.getElementById("cropCanvas");
+        const statusEl = document.getElementById("status");
+        const logEl = document.getElementById("log");
+        const btnCapture = document.getElementById("btnCapture");
+
+        const canvasCtx = poseCanvas.getContext("2d");
+        const cropCtx = cropCanvas.getContext("2d");
 
         // ===== 로그 & 상태 =====
         function log(msg) {
             const time = new Date().toLocaleTimeString();
-            document.getElementById("log").textContent = `[${time}] ${msg}\n` + document.getElementById("log").textContent;
+            logEl.textContent = `[${time}] ${msg}\n` + logEl.textContent;
+            console.log(msg);
         }
 
         function setStatus(text, type) {
-            const el = document.getElementById("status");
-            el.textContent = text;
-            el.className = "status-" + type;
+            statusEl.textContent = text;
+            statusEl.className = `status-${type}`;
         }
 
-        // ===== 모드 전환 =====
-        window.switchMode = function (mode) {
-            currentMode = mode;
-            document.getElementById("tabYoutube").classList.toggle("active", mode === "youtube");
-            document.getElementById("tabFile").classList.toggle("active", mode === "file");
-            document.getElementById("panelYoutube").style.display = mode === "youtube" ? "block" : "none";
-            document.getElementById("panelFile").style.display = mode === "file" ? "block" : "none";
-
-            document.getElementById("player").style.display = mode === "youtube" ? "block" : "none";
-            localVideo.style.display = mode === "file" ? "block" : "none";
-            if (mode === "youtube") localVideo.pause();
-
-            if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
-            canvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-            log(`모드 전환: ${mode}`);
-        };
-
-        // ===== 파일 업로드 처리 =====
-        window.handleFileSelect = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            localVideo.src = URL.createObjectURL(file);
-            localVideo.onloadeddata = () => {
-                log("📁 파일 로드 완료");
-                poseCanvas.width = localVideo.videoWidth;
-                poseCanvas.height = localVideo.videoHeight;
-                startPoseLoop();
-            };
-            localVideo.load();
-        };
-
-        // ===== 유튜브 로드 및 분석 =====
+        // ===== 유튜브 로드 =====
         window.handleLoadVideo = () => {
             const id = document.getElementById("videoIdInput").value.trim();
-            if (id.length !== 11) return alert("올바른 ID를 입력하세요.");
+            if (id.length !== 11) return alert("올바른 유튜브 ID를 입력하세요.");
             VIDEO_ID = id;
-            if (ytPlayer) ytPlayer.loadVideoById(VIDEO_ID);
-            loadProxyVideo(VIDEO_ID);
+            if (ytPlayer && ytPlayer.loadVideoById) {
+                ytPlayer.loadVideoById(VIDEO_ID);
+                log(`📺 영상 변경: ${VIDEO_ID}`);
+            }
         };
 
-        async function loadProxyVideo(videoId) {
-            const cookie = localStorage.getItem("yt_cookie");
-            if (!cookie) {
-                log("⚠️ 로그인이 필요합니다! 상단의 '유튜브 로그인' 과정을 먼저 진행해주세요.");
-                setStatus("❌ 로그인 필요", "error");
-                return;
+        // ===== 스마트 분석 토글 (핵심) =====
+        window.toggleAnalysis = async () => {
+            if (analysisActive) {
+                stopAnalysis();
+            } else {
+                await startAnalysis();
             }
+        };
 
-            setStatus("⏳ 영상 분석 스트림 로딩 중...", "loading");
+        async function startAnalysis() {
+            log("🚀 분석 엔진 가동 중...");
             try {
-                const response = await fetch(`/api/video-stream/${videoId}`, {
-                    headers: { "x-youtube-cookie": cookie }
+                // 1. 화면 공유 스트림 획득 (현재 탭)
+                captureStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        displaySurface: "browser",
+                        cursor: "never"
+                    },
+                    audio: false
                 });
 
-                if (!response.ok) throw new Error("분석 스트림 로드 실패 (로그인 만료 가능성)");
+                // 스트림 종료 핸들러 (사용자가 상단 '공유 중지' 누를 때)
+                captureStream.getVideoTracks()[0].onended = () => stopAnalysis();
 
-                proxyVideo.src = response.url;
-                proxyVideo.load();
-                proxyVideo.onloadeddata = () => {
-                    log("✅ 분석용 스트림 로드 완료");
-                    poseCanvas.width = proxyVideo.videoWidth;
-                    poseCanvas.height = proxyVideo.videoHeight;
-                    setStatus("✅ 포즈 감지 중...", "ok");
-                    startPoseLoop();
-                };
-            } catch (e) {
-                log(`❌ 오류: ${e.message}`);
-                setStatus("❌ 오류 발생", "error");
+                analysisActive = true;
+                btnCapture.textContent = "⏹️ 분석 중지";
+                btnCapture.classList.add("active");
+                setStatus("📡 실시간 화면 분석 중...", "busy");
+                log("✅ 화면 캡처 스트림 획득 (현재 탭 선택됨)");
+
+                startLoop();
+            } catch (err) {
+                log(`❌ 캡처 실패: ${err.message}`);
+                stopAnalysis();
             }
         }
 
-        // ===== MediaPipe & Loop =====
-        async function initMediaPipe() {
-            log("MediaPipe 로딩 중...");
-            try {
-                const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
-                const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
-                poseLandmarker = await vision.PoseLandmarker.createFromOptions(resolver, {
-                    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task", delegate: "GPU" },
-                    runningMode: "VIDEO", numPoses: 1
-                });
-                poseConnections = vision.PoseLandmarker.POSE_CONNECTIONS;
-                log("✅ MediaPipe 준비 완료");
-                return true;
-            } catch (e) { log("❌ MediaPipe 로드 실패"); return false; }
+        function stopAnalysis() {
+            analysisActive = false;
+            if (animFrameId) cancelAnimationFrame(animFrameId);
+            if (captureStream) {
+                captureStream.getTracks().forEach(t => t.stop());
+                captureStream = null;
+            }
+            btnCapture.textContent = "🚀 스마트 분석 시작 (캡처 모드)";
+            btnCapture.classList.remove("active");
+            setStatus("✅ 준비 완료! 영상을 분석하려면 버튼을 누르세요.", "ready");
+            canvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+            log("⏹️ 분석 중지됨");
         }
 
-        function startPoseLoop() {
-            if (animFrameId) return;
+        // ===== 분석 루프 (Smart Crop) =====
+        function startLoop() {
+            const videoTrack = captureStream.getVideoTracks()[0];
+            const captureVideo = document.createElement("video");
+            captureVideo.srcObject = captureStream;
+            captureVideo.play();
+
             function loop() {
-                const active = currentMode === "file" ? localVideo : proxyVideo;
-                if (active.readyState >= 2 && !active.paused && poseLandmarker) {
-                    const result = poseLandmarker.detectForVideo(active, performance.now());
+                if (!analysisActive) return;
+
+                // 1. 유튜브 플레이어의 현재 위치/크기 계산
+                const rect = playerDiv.getBoundingClientRect();
+
+                // 브라우저 줌(Zoom) 대응 (장치 픽셀 비)
+                const dpr = window.devicePixelRatio || 1;
+
+                // 캡처 스트림의 실제 해상도와 브라우저 뷰포트 크기 비율 계산
+                // 탭 캡처는 보통 뷰포트 영역만 가져옵니다.
+                const streamWidth = captureVideo.videoWidth;
+                const streamHeight = captureVideo.videoHeight;
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                const scaleX = streamWidth / viewportWidth;
+                const scaleY = streamHeight / viewportHeight;
+
+                // 캡처 스트림에서 잘라낼 영역 (유튜브 플레이어 좌표)
+                const sx = rect.left * scaleX;
+                const sy = rect.top * scaleY;
+                const sw = rect.width * scaleX;
+                const sh = rect.height * scaleY;
+
+                if (sw > 0 && sh > 0 && poseLandmarker) {
+                    // 2. 크롭용 캔버스 크기 조정
+                    cropCanvas.width = 640;
+                    cropCanvas.height = 360;
+
+                    // 3. 캡처 비디오에서 플레이어 영역만 크롭해서 그리기
+                    cropCtx.drawImage(captureVideo, sx, sy, sw, sh, 0, 0, 640, 360);
+
+                    // 4. MediaPipe 분석 (640x360 캔버스 사용)
+                    const result = poseLandmarker.detectForVideo(cropCanvas, performance.now());
+
+                    // 5. 그리기
+                    poseCanvas.width = playerDiv.clientWidth;
+                    poseCanvas.height = playerDiv.clientHeight;
                     canvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-                    if (result.landmarks && result.landmarks[0]) drawPose(result.landmarks[0]);
+
+                    if (result.landmarks && result.landmarks[0]) {
+                        drawPose(result.landmarks[0]);
+                    }
                 }
+
                 animFrameId = requestAnimationFrame(loop);
             }
             animFrameId = requestAnimationFrame(loop);
         }
 
+        // ===== 포즈 그리기 =====
         function drawPose(landmarks) {
             canvasCtx.save();
-            canvasCtx.strokeStyle = "rgba(0, 255, 0, 0.8)";
+            canvasCtx.strokeStyle = "rgba(0, 255, 0, 0.9)";
             canvasCtx.lineWidth = 4;
+            canvasCtx.lineJoin = "round";
+
+            // 연결선
             poseConnections.forEach(c => {
                 const s = landmarks[c.start], e = landmarks[c.end];
-                if (s.visibility > 0.5 && e.visibility > 0.5) {
+                if (s.visibility > 0.6 && e.visibility > 0.6) {
                     canvasCtx.beginPath();
                     canvasCtx.moveTo(s.x * poseCanvas.width, s.y * poseCanvas.height);
                     canvasCtx.lineTo(e.x * poseCanvas.width, e.y * poseCanvas.height);
                     canvasCtx.stroke();
                 }
             });
-            landmarks.forEach(p => {
-                if (p.visibility > 0.5) {
+
+            // 핵심 관절 포인트
+            landmarks.forEach((p, idx) => {
+                if (p.visibility > 0.6) {
                     canvasCtx.beginPath();
                     canvasCtx.arc(p.x * poseCanvas.width, p.y * poseCanvas.height, 5, 0, 2 * Math.PI);
-                    canvasCtx.fillStyle = "red";
+                    canvasCtx.fillStyle = idx % 2 === 0 ? "#FF0000" : "#FFFFFF";
                     canvasCtx.fill();
+                    canvasCtx.strokeStyle = "#000";
+                    canvasCtx.lineWidth = 1;
+                    canvasCtx.stroke();
                 }
             });
             canvasCtx.restore();
         }
 
         // ===== 초기화 =====
-        async function main() {
+        async function init() {
+            log("🤖 인공지능 모듈 로드 중...");
             try {
-                setStatus("⏳ 초기화 중...", "loading");
-                window.onYouTubeIframeAPIReady = async () => {
-                    log("✅ YouTube API 준비 완료");
+                const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
+                const FilesetResolver = vision.FilesetResolver;
+                const PoseLandmarker = vision.PoseLandmarker;
+
+                const resolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
+                poseLandmarker = await PoseLandmarker.createFromOptions(resolver, {
+                    baseOptions: {
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+                        delegate: "GPU"
+                    },
+                    runningMode: "VIDEO", numPoses: 1
+                });
+                poseConnections = PoseLandmarker.POSE_CONNECTIONS;
+
+                window.onYouTubeIframeAPIReady = () => {
                     ytPlayer = new YT.Player("player", {
                         height: "100%", width: "100%", videoId: VIDEO_ID,
-                        playerVars: { playsinline: 1, rel: 0, enablejsapi: 1 },
-                        events: { onReady: () => log("✅ 플레이어 준비 완료") }
+                        playerVars: { playsinline: 1, rel: 0, enablejsapi: 1, controls: 1 },
+                        events: {
+                            onReady: () => {
+                                log("✅ 유튜브 플레이어 준비 완료");
+                                setStatus("✅ 준비 완료! 영상을 분석하려면 버튼을 누르세요.", "ready");
+                                btnCapture.disabled = false;
+                            }
+                        }
                     });
-
-                    if (await initMediaPipe()) {
-                        setStatus("✅ 준비 완료! 로그인 후 영상을 로드하세요.", "ok");
-                        if (localStorage.getItem("yt_cookie")) loadProxyVideo(VIDEO_ID);
-                    }
                 };
-                const s = document.createElement("script");
-                s.src = "https://www.youtube.com/iframe_api";
-                document.body.appendChild(s);
-            } catch (e) { log(`초기화 오류: ${e.message}`); }
+
+                const tag = document.createElement("script");
+                tag.src = "https://www.youtube.com/iframe_api";
+                document.body.appendChild(tag);
+
+                log("✅ MediaPipe 로드 성공");
+            } catch (e) {
+                log(`❌ 초기화 실패: ${e.message}`);
+                setStatus("❌ AI 로드 실패", "err");
+            }
         }
-        main();
+
+        init();
     </script>
 </body>
 
