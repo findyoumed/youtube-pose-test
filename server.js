@@ -12,7 +12,7 @@ var __dirname = dirname(__filename);
 var app = express();
 var PORT = 3000;
 
-app.use(express.static(__dirname));
+app.use(express.static("public"));
 
 // yt-dlp로 스트림 URL 획득
 function getStreamUrl(videoId) {
