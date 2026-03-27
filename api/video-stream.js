@@ -15,41 +15,49 @@ export default async function handler(req, res) {
 
     try {
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        console.log(`Processing videoId: ${videoId}`);
 
-        // 1. Cobalt API에 영상 주소 요청
-        // Cobalt는 오픈소스 유튜브 우회 서비스로, 직접적인 스트리밍 주소를 반환합니다.
-        const cobaltResponse = await fetch("https://api.cobalt.tools/api/json", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            },
-            body: JSON.stringify({
-                url: videoUrl,
-                videoQuality: "360", // 분석용이므로 저화질(빠름) 선호
-                downloadMode: "base64" // metadata only
-            })
-        });
+        // 1. Cobalt API 요청 (가장 안정적인 방식)
+        // 불필요한 옵션을 제거하여 성공률을 높임
+        try {
+            const cobaltResponse = await fetch("https://api.cobalt.tools/api/json", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                },
+                body: JSON.stringify({
+                    url: videoUrl,
+                    videoQuality: "720" // 기본값에 가까운 설정
+                })
+            });
 
-        const data = await cobaltResponse.json();
+            const data = await cobaltResponse.json();
 
-        // Cobalt가 직접적인 다운로드/스트림 URL을 반환함
-        if (data && data.url) {
-            console.log(`✅ Cobalt success for ${videoId}: ${data.url.substring(0, 50)}...`);
-
-            // 2. 클라이언트에게 302 리다이렉트로 전달 (서버 부하 0)
-            res.setHeader("Cache-Control", "public, max-age=60");
-            return res.redirect(302, data.url);
-        } else {
-            throw new Error(data.text || "Cobalt API failed to provide URL");
+            if (data && data.url) {
+                console.log(`✅ Cobalt Success: ${videoId}`);
+                res.setHeader("Cache-Control", "public, max-age=300");
+                return res.redirect(302, data.url);
+            } else {
+                console.warn(`⚠️ Cobalt failed for ${videoId}: ${JSON.stringify(data)}`);
+            }
+        } catch (cobaltErr) {
+            console.error("❌ Cobalt API error:", cobaltErr.message);
         }
 
-    } catch (err) {
-        console.error("Proxy error:", err.message);
+        // 2. Fallback: Invidious Public Instance (Cobalt 실패 시)
+        console.log(`🔄 Trying Fallback (Invidious) for ${videoId}`);
+        const invidiousUrl = `https://yewtu.be/latest_version?id=${videoId}&itag=18`;
 
-        // 에러 발생 시 fallback: 사용자에게 직접적인 오류 메시지 전달
+        // Invidious 최신 버전 주소로 바로 리다이렉트
+        res.setHeader("Cache-Control", "public, max-age=60");
+        return res.redirect(302, invidiousUrl);
+
+    } catch (err) {
+        console.error("Critical Proxy error:", err.message);
         return res.status(500).json({
-            error: "유튜브 우회 서버가 일시적으로 응답하지 않습니다.",
+            error: "서버 오류가 발생했습니다.",
             details: err.message
         });
     }
