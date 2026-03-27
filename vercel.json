@@ -1,4 +1,14 @@
 {
+    "builds": [
+        {
+            "src": "index.html",
+            "use": "@vercel/static"
+        },
+        {
+            "src": "api/video-stream.js",
+            "use": "@vercel/node"
+        }
+    ],
     "routes": [
         {
             "src": "/api/video-stream/(?<videoId>[^/]+)",
