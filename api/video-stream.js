@@ -1,13 +1,14 @@
-// [LOG: 20260327_1112] YouTube Video Stream Proxy for Vercel - Redirect 방식
-// Vercel 서버리스 환경: 스트림 직접 파이핑 대신 스트림 URL만 받아서 리다이렉트 처리
+// [LOG: 20260327_1127] YouTube Video Stream Proxy with Cookie support
 import ytdl from "@distube/ytdl-core";
 
 export default async function handler(req, res) {
     const { videoId } = req.query;
+    const userCookie = req.headers["x-youtube-cookie"] || "";
 
-    // CORS 헤더 먼저 설정 (OPTIONS 포함)
+    // CORS 헤더 설정
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "x-youtube-cookie, content-type");
 
     if (req.method === "OPTIONS") {
         return res.status(200).end();
@@ -19,42 +20,52 @@ export default async function handler(req, res) {
 
     try {
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        console.log("Getting info for:", videoUrl);
 
-        // ytdl로 비디오 정보와 스트림 URL 가져오기
-        const info = await ytdl.getInfo(videoUrl, {
-            requestOptions: {
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                    "Accept-Language": "en-US,en;q=0.9",
-                }
+        // ytdl 옵션 설정: 사용자가 제공한 쿠키 포함
+        const requestOptions = {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
             }
-        });
+        };
 
-        // mp4 + 오디오+비디오 합성 포맷 (itag 18 = 360p, itag 22 = 720p)
-        // Vercel 서버리스에서는 스트림 직접 파이핑이 타임아웃 위험 있음
-        // 대신 스트림 URL로 리다이렉트해서 브라우저가 직접 가져가게 함
+        if (userCookie) {
+            requestOptions.headers["Cookie"] = userCookie;
+            console.log("Using provided user cookie for video:", videoId);
+        } else {
+            console.log("No cookie provided, may be blocked by YouTube bot detection.");
+        }
+
+        // 비디오 정보 가져오기
+        const info = await ytdl.getInfo(videoUrl, { requestOptions });
+
+        // 화질 선택 (360p mp4 itag 18 우선)
         const format = ytdl.chooseFormat(info.formats, {
             quality: [18, 22],
             filter: "audioandvideo"
         });
 
         if (!format || !format.url) {
-            return res.status(500).json({ error: "No suitable format found" });
+            throw new Error("No suitable format found");
         }
 
-        console.log("Redirecting to format:", format.qualityLabel, format.container);
-
-        // 302 리다이렉트: 브라우저가 YouTube CDN에서 직접 가져감
-        // 주의: 이 방식은 CORS 정책에 따라 브라우저에서 crossorigin 요청에 제한이 있을 수 있음
+        // 302 리다이렉트 (Vercel 타임아웃 방지)
         res.setHeader("Cache-Control", "public, max-age=30");
         res.redirect(302, format.url);
 
     } catch (err) {
-        console.error("Proxy error:", err.message, err.stack);
+        console.error("Proxy error:", err.message);
+
+        let errorMessage = err.message;
+        let hint = "Try updating your YouTube cookie in the application settings.";
+
+        if (err.message.includes("Sign in to confirm")) {
+            errorMessage = "YouTube bot detection triggered. Please provide a fresh login cookie.";
+        }
+
         return res.status(500).json({
-            error: err.message,
-            hint: "ytdl-core may be blocked by YouTube on this server IP"
+            error: errorMessage,
+            hint: hint
         });
     }
 }
