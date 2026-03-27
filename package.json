@@ -5,6 +5,7 @@
     "type": "module",
     "dependencies": {
         "express": "^4.18.2",
-        "@distube/ytdl-core": "^4.16.10"
+        "@distube/ytdl-core": "^4.16.10",
+        "node-fetch": "^3.3.2"
     }
 }
