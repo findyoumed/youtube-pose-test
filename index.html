@@ -195,7 +195,7 @@
             logEl.innerHTML = `> ${msg}<br>` + logEl.innerHTML;
         }
 
-        async function startAnalysis() {
+        window.startAnalysis = async function startAnalysis() {
             const id = document.getElementById("videoIdInput").value.trim();
             if (id.length !== 11) return alert("올바른 유튜브 ID를 입력하세요.");
 
@@ -231,7 +231,7 @@
                 statusEl.style.color = "#f87171";
                 btnStart.disabled = false;
             }
-        }
+        };
 
         async function initAI() {
             try {
