@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube Pose Detection Test</title>
     <style>
-        /* [LOG: 20260327_0943] 기본 스타일 */
+        /* [LOG: 20260327_1121] 기본 스타일 */
         * {
             margin: 0;
             padding: 0;
@@ -44,7 +44,15 @@
             height: 100%;
         }
 
-        /* 프록시 비디오 (MediaPipe용, 숨김) */
+        /* 로컬 파일 비디오 (MediaPipe용) */
+        #localVideo {
+            width: 100%;
+            height: 100%;
+            display: none;
+            background: #000;
+        }
+
+        /* 프록시 비디오 (숨김, 로컬서버용) */
         #proxyVideo {
             display: none;
         }
@@ -88,6 +96,8 @@
             display: flex;
             gap: 10px;
             margin-bottom: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
 
         button {
@@ -107,6 +117,78 @@
         button.active {
             background: #2563eb;
             border-color: #3b82f6;
+        }
+
+        /* 모드 탭 */
+        .mode-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #444;
+        }
+
+        .mode-tab {
+            padding: 10px 24px;
+            background: #222;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 14px;
+            border: none;
+            border-radius: 0;
+        }
+
+        .mode-tab.active {
+            background: #2563eb;
+            color: #fff;
+        }
+
+        /* 패널 */
+        .panel {
+            background: #222;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            width: 640px;
+        }
+
+        .panel label {
+            font-size: 14px;
+            margin-right: 10px;
+        }
+
+        input[type="text"] {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            background: #111;
+            color: #fff;
+            width: 120px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-btn {
+            padding: 10px 20px;
+            background: #16a34a;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .file-btn:hover {
+            background: #15803d;
+        }
+
+        #fileInfo {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #aaa;
         }
 
         /* 로그 */
@@ -129,21 +211,39 @@
     <h1>🏋️ YouTube Pose Detection Test</h1>
 
     <!-- 상태 표시 -->
-    <div id="status" class="status-loading">⏳ YouTube API 로딩 중...</div>
+    <div id="status" class="status-loading">⏳ 초기화 중...</div>
 
-    <!-- 비디오 ID 입력 -->
-    <div class="controls" style="margin-bottom: 20px; background: #222; padding: 15px; border-radius: 8px;">
-        <span style="font-size: 14px; margin-right: 10px;">YouTube Video ID:</span>
-        <input type="text" id="videoIdInput" value="8a9M0lNY37s"
-            style="padding: 8px; border-radius: 4px; border: 1px solid #444; background: #111; color: #fff; width: 120px;">
+    <!-- 모드 선택 탭 -->
+    <div class="mode-tabs">
+        <button class="mode-tab active" id="tabYoutube" onclick="switchMode('youtube')">📺 YouTube 재생</button>
+        <button class="mode-tab" id="tabFile" onclick="switchMode('file')">📁 내 영상 파일 (포즈감지)</button>
+    </div>
+
+    <!-- YouTube 모드 패널 -->
+    <div class="panel" id="panelYoutube">
+        <label>YouTube Video ID:</label>
+        <input type="text" id="videoIdInput" value="8a9M0lNY37s">
         <button onclick="handleLoadVideo()" style="background: #2563eb; color: white;">영상 로드</button>
+        <div style="margin-top:8px; font-size:12px; color:#888;">
+            ※ YouTube 영상은 플레이어에서 재생됩니다. 포즈 감지는 아래 "내 영상 파일" 탭을 사용하세요.
+        </div>
+    </div>
+
+    <!-- 파일 모드 패널 -->
+    <div class="panel" id="panelFile" style="display:none;">
+        <label>영상 파일 선택 (mp4, webm 등):</label><br><br>
+        <button class="file-btn" onclick="document.getElementById('fileInput').click()">📂 파일 선택</button>
+        <input type="file" id="fileInput" accept="video/*" onchange="handleFileSelect(event)">
+        <div id="fileInfo">파일을 선택하면 자동으로 포즈 감지가 시작됩니다.</div>
     </div>
 
     <!-- 비디오 + 포즈 캔버스 -->
     <div class="video-container">
         <!-- YouTube IFrame 플레이어 -->
         <div id="player"></div>
-        <!-- MediaPipe용 프록시 비디오 (숨김) -->
+        <!-- 로컬 파일 비디오 (파일 모드) -->
+        <video id="localVideo" controls playsinline></video>
+        <!-- 숨김: 프록시 비디오 (로컬서버용) -->
         <video id="proxyVideo" crossorigin="anonymous" playsinline></video>
         <canvas id="poseCanvas"></canvas>
     </div>
@@ -157,13 +257,15 @@
     <div id="log"></div>
 
     <script type="module">
-        // [LOG: 20260327_0943] YouTube Pose Detection Test - Main Script
+        // [LOG: 20260327_1121] YouTube Pose Detection - Dual Mode (YouTube + File Upload)
 
         // ===== 설정 =====
         var VIDEO_ID = "8a9M0lNY37s";
+        var currentMode = "youtube"; // "youtube" | "file"
 
         // ===== DOM 요소 =====
         var proxyVideo = document.getElementById("proxyVideo");
+        var localVideo = document.getElementById("localVideo");
         var poseCanvas = document.getElementById("poseCanvas");
         var statusEl = document.getElementById("status");
         var logEl = document.getElementById("log");
@@ -176,6 +278,12 @@
         var canvasCtx = poseCanvas.getContext("2d");
         var poseEnabled = true;
         var animFrameId = null;
+
+        // ===== 현재 분석 대상 비디오 =====
+        function getActiveVideo() {
+            if (currentMode === "file") return localVideo;
+            return proxyVideo;
+        }
 
         // ===== 로그 함수 =====
         function log(msg) {
@@ -191,22 +299,86 @@
             statusEl.className = "status-" + type;
         }
 
+        // ===== 모드 전환 =====
+        window.switchMode = function (mode) {
+            currentMode = mode;
+
+            // 탭 스타일 업데이트
+            document.getElementById("tabYoutube").classList.toggle("active", mode === "youtube");
+            document.getElementById("tabFile").classList.toggle("active", mode === "file");
+
+            // 패널 표시
+            document.getElementById("panelYoutube").style.display = mode === "youtube" ? "block" : "none";
+            document.getElementById("panelFile").style.display = mode === "file" ? "block" : "none";
+
+            // 비디오 컨테이너 업데이트
+            if (mode === "youtube") {
+                document.getElementById("player").style.display = "block";
+                localVideo.style.display = "none";
+                localVideo.pause();
+            } else {
+                document.getElementById("player").style.display = "none";
+                localVideo.style.display = "block";
+            }
+
+            // 포즈 루프 중지
+            if (animFrameId) {
+                cancelAnimationFrame(animFrameId);
+                animFrameId = null;
+            }
+            canvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+
+            log("모드 전환: " + mode);
+        };
+
+        // ===== 파일 선택 핸들러 =====
+        window.handleFileSelect = function (event) {
+            var file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById("fileInfo").textContent = "선택된 파일: " + file.name;
+            log("📁 파일 선택: " + file.name);
+
+            var url = URL.createObjectURL(file);
+            localVideo.src = url;
+
+            localVideo.onloadeddata = function () {
+                log("✅ 영상 로드 완료 (" + localVideo.videoWidth + "x" + localVideo.videoHeight + ")");
+                poseCanvas.width = localVideo.videoWidth || 640;
+                poseCanvas.height = localVideo.videoHeight || 360;
+                setStatus("✅ 파일 로드 완료! 재생하면 포즈 감지가 시작됩니다.", "ok");
+            };
+
+            localVideo.onplay = function () {
+                log("▶️ 재생 시작 → 포즈 감지 루프 시작");
+                if (poseEnabled && !animFrameId) {
+                    startPoseLoop();
+                }
+            };
+
+            localVideo.onpause = function () {
+                if (animFrameId) {
+                    cancelAnimationFrame(animFrameId);
+                    animFrameId = null;
+                }
+            };
+
+            localVideo.load();
+        };
+
         // ===== YouTube IFrame API 로드 =====
         function loadYouTubeAPI() {
             return new Promise(function (resolve, reject) {
-                // 이미 로드된 경우
                 if (window.YT && window.YT.Player) {
                     resolve();
                     return;
                 }
 
-                // API 준비 콜백 등록
                 window.onYouTubeIframeAPIReady = function () {
                     log("✅ YouTube IFrame API 준비 완료");
                     resolve();
                 };
 
-                // 스크립트 주입
                 var tag = document.createElement("script");
                 tag.src = "https://www.youtube.com/iframe_api";
                 tag.onerror = function () {
@@ -232,13 +404,9 @@
                         enablejsapi: 1
                     },
                     events: {
-                        onReady: function (e) {
+                        onReady: function () {
                             log("✅ YouTube 플레이어 준비 완료");
-                            setStatus("✅ 준비 완료! 재생 → 포즈감지 ON 순서로 사용하세요.", "ok");
                             resolve();
-                        },
-                        onStateChange: function (e) {
-                            onPlayerStateChange(e.data);
                         },
                         onError: function (e) {
                             log("❌ 플레이어 에러: " + e.data);
@@ -246,61 +414,6 @@
                     }
                 });
             });
-        }
-
-        // ===== 플레이어 상태 변경 → 프록시 비디오 동기화 =====
-        function onPlayerStateChange(state) {
-            if (!proxyVideo.src) return;
-
-            try {
-                var currentTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
-                var rate = ytPlayer.getPlaybackRate ? ytPlayer.getPlaybackRate() : 1.0;
-
-                // 재생 속도 동기화
-                if (proxyVideo.playbackRate !== rate) {
-                    proxyVideo.playbackRate = rate;
-                }
-
-                // 시간 차이가 2초 이상이면 동기화
-                if (Math.abs(proxyVideo.currentTime - currentTime) > 2) {
-                    proxyVideo.currentTime = currentTime;
-                }
-
-                if (state === YT.PlayerState.PLAYING) {
-                    proxyVideo.play().catch(function (e) {
-                        log("⚠️ 프록시 재생 실패: " + e.message);
-                    });
-                    if (poseEnabled && !animFrameId) {
-                        startPoseLoop();
-                    }
-                } else if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.ENDED) {
-                    proxyVideo.pause();
-                }
-            } catch (e) {
-                log("⚠️ 동기화 오류: " + e.message);
-            }
-        }
-
-        // ===== 프록시 비디오 로드 =====
-        function loadProxyVideo(videoId) {
-            var url = "/api/video-stream/" + videoId;
-            log("프록시 요청: " + url);
-            proxyVideo.src = url;
-
-            proxyVideo.onloadeddata = function () {
-                log("✅ 프록시 영상 로드 완료 (" + proxyVideo.videoWidth + "x" + proxyVideo.videoHeight + ")");
-                poseCanvas.width = proxyVideo.videoWidth;
-                poseCanvas.height = proxyVideo.videoHeight;
-                if (poseEnabled && !animFrameId) {
-                    startPoseLoop();
-                }
-            };
-
-            proxyVideo.onerror = function () {
-                log("❌ 프록시 영상 로드 실패 (포즈 감지 불가)");
-            };
-
-            proxyVideo.load();
         }
 
         // ===== 영상 로드 버튼 핸들러 =====
@@ -312,22 +425,30 @@
             }
             VIDEO_ID = id;
 
-            // 포즈 루프 중지
-            if (animFrameId) {
-                cancelAnimationFrame(animFrameId);
-                animFrameId = null;
-            }
-            canvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-
-            // YouTube IFrame 플레이어에 새 영상 로드
             if (ytPlayer && ytPlayer.loadVideoById) {
                 ytPlayer.loadVideoById(VIDEO_ID);
                 log("📺 IFrame 영상 변경: " + VIDEO_ID);
             }
-
-            // 프록시 비디오도 새 영상 로드
-            loadProxyVideo(VIDEO_ID);
         };
+
+        // ===== 프록시 비디오 로드 (로컬서버용) =====
+        function loadProxyVideo(videoId) {
+            var url = "/api/video-stream/" + videoId;
+            log("프록시 요청: " + url);
+            proxyVideo.src = url;
+
+            proxyVideo.onloadeddata = function () {
+                log("✅ 프록시 영상 로드 완료 (" + proxyVideo.videoWidth + "x" + proxyVideo.videoHeight + ")");
+                poseCanvas.width = proxyVideo.videoWidth;
+                poseCanvas.height = proxyVideo.videoHeight;
+            };
+
+            proxyVideo.onerror = function () {
+                log("⚠️ 프록시 영상 로드 실패 (Vercel 환경에서는 정상. 파일 탭을 사용하세요.)");
+            };
+
+            proxyVideo.load();
+        }
 
         // ===== 포즈 감지 토글 =====
         window.handleTogglePose = function () {
@@ -338,7 +459,8 @@
                 btnTogglePose.classList.add("active");
                 log("🦴 포즈 감지 켜짐");
 
-                if (ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING) {
+                var active = getActiveVideo();
+                if (!active.paused && !animFrameId) {
                     startPoseLoop();
                 }
             } else {
@@ -396,23 +518,24 @@
                     return;
                 }
 
-                var ready = proxyVideo.readyState >= 2;
-                var playing = !proxyVideo.paused;
+                var active = getActiveVideo();
+                var ready = active.readyState >= 2;
+                var playing = !active.paused;
 
                 if (ready && playing && poseLandmarker) {
                     var timeMs = performance.now();
 
                     try {
-                        var result = poseLandmarker.detectForVideo(proxyVideo, timeMs);
+                        var result = poseLandmarker.detectForVideo(active, timeMs);
 
                         detectCount++;
                         if (detectCount === 1) {
                             log("✅ detectForVideo 첫 호출 성공!");
                         }
 
-                        if (poseCanvas.width !== proxyVideo.videoWidth || poseCanvas.height !== proxyVideo.videoHeight) {
-                            poseCanvas.width = proxyVideo.videoWidth;
-                            poseCanvas.height = proxyVideo.videoHeight;
+                        if (poseCanvas.width !== active.videoWidth || poseCanvas.height !== active.videoHeight) {
+                            poseCanvas.width = active.videoWidth || 640;
+                            poseCanvas.height = active.videoHeight || 360;
                         }
 
                         canvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
@@ -479,7 +602,7 @@
 
         // ===== 초기화 =====
         async function main() {
-            log("=== YouTube Pose Detection Test ===");
+            log("=== YouTube Pose Detection Test (Dual Mode) ===");
 
             var initialId = document.getElementById("videoIdInput").value.trim();
             if (initialId) VIDEO_ID = initialId;
@@ -495,16 +618,18 @@
                 return;
             }
 
-            // 2. YouTube IFrame 플레이어 생성 + 프록시 비디오 로드 (동시)
-            loadProxyVideo(VIDEO_ID);
+            // 2. YouTube IFrame 플레이어 생성
             await createYouTubePlayer(VIDEO_ID);
 
-            // 3. MediaPipe 초기화 (동시에)
+            // 3. 프록시 비디오 로드 (로컬서버 환경에서만 작동)
+            loadProxyVideo(VIDEO_ID);
+
+            // 4. MediaPipe 초기화
             var mpOk = await initMediaPipe();
             if (!mpOk) {
                 setStatus("⚠️ MediaPipe 실패. 영상만 재생 가능.", "error");
             } else {
-                setStatus("✅ 준비 완료! 재생 후 포즈감지 ON을 누르세요.", "ok");
+                setStatus("✅ 준비 완료! 📺 YouTube 탭: 영상 시청 | 📁 파일 탭: 포즈 감지", "ok");
             }
         }
 
