@@ -1,8 +1,16 @@
 {
-    "rewrites": [
+    "version": 2,
+    "routes": [
         {
-            "source": "/api/video-stream/:videoId",
-            "destination": "/api/video-stream?videoId=:videoId"
+            "src": "/api/video-stream/(?<videoId>[^/]+)",
+            "dest": "/api/video-stream?videoId=$videoId"
+        },
+        {
+            "handle": "filesystem"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/index.html"
         }
     ]
 }
