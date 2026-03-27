@@ -166,14 +166,19 @@
         <div class="controls">
             <div id="status">⏳ 모듈 초기화 중...</div>
 
-            <label class="file-upload" id="dropZone">
-                <input type="file" id="videoInput" accept="video/*">
-                <span class="upload-label">📁 분석할 영상 파일 선택 (또는 드래그)</span>
-                <span class="upload-hint">MP4, MOV, WebM 등 모든 영상 지원</span>
-            </label>
+            <div style="display: flex; gap: 10px;">
+                <label class="file-upload" id="dropZone" style="flex: 1;">
+                    <input type="file" id="videoInput" accept="video/*">
+                    <span class="upload-label">📁 영상 파일 선택</span>
+                </label>
+                <button onclick="toggleHardware()"
+                    style="background: #334155; color: #94a3b8; font-size: 11px; padding: 10px;">
+                    ⚙️ 가속 모드 변경
+                </button>
+            </div>
 
             <p style="font-size: 11px; color: #64748b; text-align: center;">
-                💡 팁: 유튜브 영상을 다운로드한 뒤 선택하면 가장 정확하게 분석됩니다.
+                💡 팁: 영상이 너무 느리다면 '가속 모드 변경'을 눌러보세요.
             </p>
         </div>
     </div>
@@ -239,20 +244,30 @@
         }
 
         // 3. 실시간 분석 루프
+        let lastTime = -1;
         function startLoop() {
             function loop() {
+                // 영상이 로드되고 재생 중일 때만 실행
                 if (mainVideo.readyState >= 2 && !mainVideo.paused && poseLandmarker) {
                     try {
-                        const result = poseLandmarker.detectForVideo(mainVideo, performance.now());
+                        const now = performance.now();
+                        // 30fps 정도로 조절 (CPU 부하 감소)
+                        if (now - lastTime < 33) {
+                            animFrameId = requestAnimationFrame(loop);
+                            return;
+                        }
+                        lastTime = now;
+
+                        const result = poseLandmarker.detectForVideo(mainVideo, now);
                         ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
 
-                        if (result.landmarks && result.landmarks[0]) {
+                        if (result.landmarks && result.landmarks.length > 0) {
                             drawPose(result.landmarks[0]);
                         } else {
                             // 감지 중임을 알리는 작은 표시
-                            ctx.fillStyle = "rgba(239, 68, 68, 0.5)";
+                            ctx.fillStyle = "#fbbf24";
                             ctx.font = "12px sans-serif";
-                            ctx.fillText("🔍 인물 검색 중...", 10, 20);
+                            ctx.fillText("🔍 인물 검색 중... (영상을 재생해 주세요)", 10, 20);
                         }
                     } catch (err) {
                         console.error("Detection error:", err);
@@ -268,10 +283,12 @@
             ctx.strokeStyle = "#4ade80";
             ctx.lineWidth = 4;
 
-            // 선 그리기 (임계값 0.5로 완화)
+            let detectedCount = 0;
+
+            // 선 그리기 (임계값 0.4로 더 낮춤)
             poseConnections.forEach(c => {
                 const s = landmarks[c.start], e = landmarks[c.end];
-                if ((s.visibility > 0.5) && (e.visibility > 0.5)) {
+                if (s.visibility > 0.4 && e.visibility > 0.4) {
                     ctx.beginPath();
                     ctx.moveTo(s.x * poseCanvas.width, s.y * poseCanvas.height);
                     ctx.lineTo(e.x * poseCanvas.width, e.y * poseCanvas.height);
@@ -279,9 +296,10 @@
                 }
             });
 
-            // 점 그리기 (임계값 0.5로 완화)
+            // 점 그리기
             landmarks.forEach((p, idx) => {
-                if (p.visibility > 0.5) {
+                if (p.visibility > 0.4) {
+                    detectedCount++;
                     ctx.beginPath();
                     ctx.arc(p.x * poseCanvas.width, p.y * poseCanvas.height, 5, 0, 2 * Math.PI);
                     ctx.fillStyle = idx % 2 === 0 ? "#ef4444" : "#fff";
@@ -289,10 +307,10 @@
                 }
             });
 
-            // 분석 중 텍스트 표시
+            // 상태 표시
             ctx.fillStyle = "#4ade80";
             ctx.font = "bold 14px sans-serif";
-            ctx.fillText("✅ 분석 중", 10, 25);
+            ctx.fillText(`✅ 분석 중 (관절 ${detectedCount}개 감지)`, 10, 25);
             ctx.restore();
         }
 
