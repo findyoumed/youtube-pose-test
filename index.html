@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube Pose Detection Test</title>
     <style>
-        /* [LOG: 20260327_1125] 쿠키 우회 지원 스타일 추가 */
+        /* [LOG: 20260327_1205] Bookmarklet Login UI 추가 */
         * {
             margin: 0;
             padding: 0;
@@ -91,34 +91,6 @@
             color: #f87171;
         }
 
-        /* 컨트롤 */
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-
-        button {
-            padding: 8px 16px;
-            background: #333;
-            color: #fff;
-            border: 1px solid #555;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-        button:hover {
-            background: #444;
-        }
-
-        button.active {
-            background: #2563eb;
-            border-color: #3b82f6;
-        }
-
         /* 모드 탭 */
         .mode-tabs {
             display: flex;
@@ -149,7 +121,7 @@
             background: #222;
             padding: 15px;
             border-radius: 8px;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             width: 640px;
         }
 
@@ -168,17 +140,10 @@
             font-size: 14px;
         }
 
-        textarea {
-            width: 100%;
-            height: 60px;
-            margin-top: 5px;
-            resize: none;
-        }
-
         /* 로그 */
         #log {
             width: 640px;
-            height: 150px;
+            height: 120px;
             background: #1a1a1a;
             border: 1px solid #333;
             border-radius: 8px;
@@ -189,20 +154,73 @@
             white-space: pre-wrap;
         }
 
-        .help-box {
-            background: #333;
+        /* 북마크릿 버튼 스타일 */
+        .login-btn-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
             padding: 10px;
-            border-radius: 6px;
-            margin-top: 10px;
-            font-size: 12px;
-            line-height: 1.5;
         }
 
-        code {
-            background: #000;
-            padding: 2px 4px;
-            border-radius: 3px;
+        .bookmark-link {
+            display: inline-block;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 30px;
+            font-weight: bold;
+            font-size: 15px;
+            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.3);
+            cursor: move;
+            transition: transform 0.2s;
+        }
+
+        .bookmark-link:hover {
+            transform: scale(1.05);
+        }
+
+        .step-box {
+            background: #333;
+            padding: 12px;
+            border-radius: 8px;
+            width: 100%;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .step-box b {
             color: #facc15;
+        }
+
+        .cookie-status {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .success-badge {
+            background: #16a34a;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-left: 5px;
+        }
+
+        button.main-action {
+            padding: 10px 20px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button.main-action:hover {
+            background: #1d4ed8;
         }
     </style>
 </head>
@@ -215,132 +233,123 @@
 
     <!-- 모드 선택 탭 -->
     <div class="mode-tabs">
-        <button class="mode-tab active" id="tabYoutube" onclick="switchMode('youtube')">📺 YouTube 모드 (쿠키 필요)</button>
+        <button class="mode-tab active" id="tabYoutube" onclick="switchMode('youtube')">📺 YouTube 모드 (추천)</button>
         <button class="mode-tab" id="tabFile" onclick="switchMode('file')">📁 내 영상 파일 모드</button>
     </div>
 
     <!-- YouTube 모드 패널 -->
     <div class="panel" id="panelYoutube">
-        <div style="margin-bottom: 15px;">
-            <label>YouTube Video ID:</label>
-            <input type="text" id="videoIdInput" value="8a9M0lNY37s">
-            <button onclick="handleLoadVideo()" style="background: #2563eb; color: white;">영상 로드</button>
+        <!-- 1. 로그인 단계 -->
+        <div class="login-btn-container">
+            <div class="step-box">
+                <b>1단계:</b> 아래 버튼을 <b>즐겨찾기 바(Bookmarks Bar)</b>로 끌어다 놓으세요.
+            </div>
+
+            <a id="bookmarkletLink" class="bookmark-link" href="#"
+                onclick="alert('이 버튼을 즐겨찾기 바(상단 바)로 드래그해서 놓아주세요!'); return false;">
+                🔴 YouTube 로그인
+            </a>
+
+            <div class="step-box">
+                <b>2단계:</b> <a href="https://www.youtube.com" target="_blank" style="color: #3b82f6;">유튜브</a>에 접속한 뒤,
+                위에서 추가한 <b>[🔴 YouTube 로그인] 즐겨찾기</b>를 클릭하세요.
+            </div>
+
+            <div id="cookieStatus" class="cookie-status">
+                상태: <span id="cookieValue">쿠키 없음 (로그인 필요)</span>
+            </div>
         </div>
 
-        <hr style="border: 0; border-top: 1px solid #444; margin: 15px 0;">
+        <hr style="border: 0; border-top: 1px solid #444; margin: 20px 0;">
 
-        <div>
-            <label>🔑 YouTube 로그인 쿠키 설정 (Vercel 우회용):</label>
-            <textarea id="cookieInput" placeholder="여기에 쿠키를 붙여넣으세요..."></textarea>
-            <div style="margin-top: 5px; display: flex; gap: 10px;">
-                <button onclick="saveCookie()">저장</button>
-                <button onclick="clearCookie()" style="color: #f87171;">삭제</button>
-            </div>
-
-            <div class="help-box">
-                <strong>💡 쿠키 가져오는 방법:</strong><br>
-                1. <a href="https://www.youtube.com" target="_blank" style="color: #3b82f6;">YouTube</a>에 접속하여
-                로그인합니다.<br>
-                2. <code>F12</code>을 눌러 개발자 도구의 <strong>Console</strong> 탭을 엽니다.<br>
-                3. <code>copy(document.cookie)</code>를 입력하고 엔터를 칩니다.<br>
-                4. 복사된 내용을 위 입력창에 붙여넣고 <strong>저장</strong>을 누르세요.
-            </div>
+        <!-- 2. 영상 로드 단계 -->
+        <div style="display: flex; gap: 10px; align-items: center; justify-content: center;">
+            <label>Video ID:</label>
+            <input type="text" id="videoIdInput" value="8a9M0lNY37s" style="width: 150px;">
+            <button class="main-action" onclick="handleLoadVideo()">영상 로드 및 감지 시작</button>
         </div>
     </div>
 
     <!-- 파일 모드 패널 -->
     <div class="panel" id="panelFile" style="display:none;">
         <label>영상 파일 선택 (mp4, webm 등):</label><br><br>
-        <button onclick="document.getElementById('fileInput').click()">📂 파일 선택</button>
+        <button onclick="document.getElementById('fileInput').click()" class="main-action"
+            style="background: #16a34a;">📂 파일 선택</button>
         <input type="file" id="fileInput" accept="video/*" onchange="handleFileSelect(event)">
-        <div id="fileInfo" style="margin-top: 10px; color: #aaa;">파일을 선택하면 자동으로 포즈 감지가 시작됩니다.</div>
+        <div id="fileInfo" style="margin-top: 10px; color: #aaa; font-size: 13px;">파일을 선택하면 자동으로 포즈 감지가 시작됩니다.</div>
     </div>
 
     <!-- 비디오 + 포즈 캔버스 -->
     <div class="video-container">
-        <!-- YouTube IFrame 플레이어 -->
         <div id="player"></div>
-        <!-- 로컬 파일 비디오 -->
         <video id="localVideo" controls playsinline></video>
-        <!-- 숨김: 프록시 비디오 (분석용) -->
         <video id="proxyVideo" crossorigin="anonymous" playsinline style="display:none;"></video>
         <canvas id="poseCanvas"></canvas>
-    </div>
-
-    <!-- 컨트롤 버튼 -->
-    <div class="controls">
-        <button id="btnTogglePose" onclick="handleTogglePose()" class="active">🦴 포즈감지: ON</button>
     </div>
 
     <!-- 로그 -->
     <div id="log"></div>
 
     <script type="module">
-        // [LOG: 20260327_1125] YouTube Cookie Bypass logic integrated
+        // [LOG: 20260327_1205] Bookmarklet Login Logic
 
-        // ===== 설정 =====
+        // ===== 1. URL 파라미터 체크 (북마크릿에서 돌아왔을 때) =====
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlCookie = urlParams.get("cookie");
+        if (urlCookie) {
+            localStorage.setItem("yt_cookie", urlCookie);
+            // URL 정화 (쿠키 노출 방지)
+            const cleanUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+            console.log("✅ 북마크릿을 통해 쿠키가 성공적으로 갱신되었습니다.");
+        }
+
+        // ===== 2. 북마크릿 링크 생성 =====
+        const currentOrigin = window.location.origin + window.location.pathname;
+        const jsCode = `javascript:(function(){
+            var c = document.cookie;
+            if(!c) { alert('유튜브에 먼저 로그인해주세요!'); return; }
+            window.location.href = "${currentOrigin}?cookie=" + encodeURIComponent(c);
+        })();`.replace(/\n/g, "");
+        document.getElementById("bookmarkletLink").href = jsCode;
+
+        // ===== 3. 쿠키 상태 표시 =====
+        function updateCookieUI() {
+            const hasCookie = !!localStorage.getItem("yt_cookie");
+            const valEl = document.getElementById("cookieValue");
+            if (hasCookie) {
+                valEl.innerHTML = "✅ 로그인 정보 저장됨 <span class='success-badge'>준비 완료</span>";
+                valEl.style.color = "#4ade80";
+            } else {
+                valEl.textContent = "❌ 쿠키 없음 (로그인 과정 진행 필요)";
+                valEl.style.color = "#f87171";
+            }
+        }
+        updateCookieUI();
+
+        // ===== 설정 & 상태 =====
         var VIDEO_ID = "8a9M0lNY37s";
         var currentMode = "youtube";
-
-        // ===== DOM 요소 =====
-        var proxyVideo = document.getElementById("proxyVideo");
-        var localVideo = document.getElementById("localVideo");
-        var poseCanvas = document.getElementById("poseCanvas");
-        var statusEl = document.getElementById("status");
-        var logEl = document.getElementById("log");
-        var btnTogglePose = document.getElementById("btnTogglePose");
-        var cookieInput = document.getElementById("cookieInput");
-
-        // ===== 상태 변수 =====
         var ytPlayer = null;
         var poseLandmarker = null;
         var poseConnections = null;
-        var canvasCtx = poseCanvas.getContext("2d");
-        var poseEnabled = true;
+        var canvasCtx = document.getElementById("poseCanvas").getContext("2d");
         var animFrameId = null;
 
-        // ===== 쿠키 관리 =====
-        window.saveCookie = function () {
-            var val = cookieInput.value.trim();
-            if (val) {
-                localStorage.setItem("yt_cookie", val);
-                log("✅ 쿠키가 저장되었습니다. 영상 로드를 다시 시도하세요.");
-                alert("쿠키가 저장되었습니다.");
-            } else {
-                alert("내용을 입력해주세요.");
-            }
-        };
+        const proxyVideo = document.getElementById("proxyVideo");
+        const localVideo = document.getElementById("localVideo");
+        const poseCanvas = document.getElementById("poseCanvas");
 
-        window.clearCookie = function () {
-            localStorage.removeItem("yt_cookie");
-            cookieInput.value = "";
-            log("🗑️ 쿠키가 삭제되었습니다.");
-            alert("삭제되었습니다.");
-        };
-
-        function getSavedCookie() {
-            return localStorage.getItem("yt_cookie") || "";
-        }
-
-        // 초기 쿠키 로드
-        cookieInput.value = getSavedCookie();
-
-        // ===== 비디오 선택 =====
-        function getActiveVideo() {
-            return currentMode === "file" ? localVideo : proxyVideo;
-        }
-
-        // ===== 로그 =====
+        // ===== 로그 & 상태 =====
         function log(msg) {
-            var time = new Date().toLocaleTimeString();
-            var line = "[" + time + "] " + msg;
-            console.log(line);
-            logEl.textContent = line + "\n" + logEl.textContent;
+            const time = new Date().toLocaleTimeString();
+            document.getElementById("log").textContent = `[${time}] ${msg}\n` + document.getElementById("log").textContent;
         }
 
         function setStatus(text, type) {
-            statusEl.textContent = text;
-            statusEl.className = "status-" + type;
+            const el = document.getElementById("status");
+            el.textContent = text;
+            el.className = "status-" + type;
         }
 
         // ===== 모드 전환 =====
@@ -351,136 +360,91 @@
             document.getElementById("panelYoutube").style.display = mode === "youtube" ? "block" : "none";
             document.getElementById("panelFile").style.display = mode === "file" ? "block" : "none";
 
-            if (mode === "youtube") {
-                document.getElementById("player").style.display = "block";
-                localVideo.style.display = "none";
-                localVideo.pause();
-                // 유튜브 모드 진입 시 프록시 비디오 로드 시도
-                loadProxyVideo(VIDEO_ID);
-            } else {
-                document.getElementById("player").style.display = "none";
-                localVideo.style.display = "block";
-            }
+            document.getElementById("player").style.display = mode === "youtube" ? "block" : "none";
+            localVideo.style.display = mode === "file" ? "block" : "none";
+            if (mode === "youtube") localVideo.pause();
 
-            if (animFrameId) {
-                cancelAnimationFrame(animFrameId);
-                animFrameId = null;
-            }
+            if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
             canvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-            log("모드 변경: " + mode);
+            log(`모드 전환: ${mode}`);
         };
 
-        // ===== 파일 선택 =====
-        window.handleFileSelect = function (event) {
-            var file = event.target.files[0];
+        // ===== 파일 업로드 처리 =====
+        window.handleFileSelect = (e) => {
+            const file = e.target.files[0];
             if (!file) return;
-            var url = URL.createObjectURL(file);
-            localVideo.src = url;
+            localVideo.src = URL.createObjectURL(file);
             localVideo.onloadeddata = () => {
-                log("📁 로컬 파일 로드 완료");
+                log("📁 파일 로드 완료");
                 poseCanvas.width = localVideo.videoWidth;
                 poseCanvas.height = localVideo.videoHeight;
-                if (poseEnabled) startPoseLoop();
+                startPoseLoop();
             };
             localVideo.load();
         };
 
-        // ===== YouTube 로드 =====
-        window.handleLoadVideo = function () {
-            var id = document.getElementById("videoIdInput").value.trim();
+        // ===== 유튜브 로드 및 분석 =====
+        window.handleLoadVideo = () => {
+            const id = document.getElementById("videoIdInput").value.trim();
             if (id.length !== 11) return alert("올바른 ID를 입력하세요.");
             VIDEO_ID = id;
             if (ytPlayer) ytPlayer.loadVideoById(VIDEO_ID);
             loadProxyVideo(VIDEO_ID);
         };
 
-        // ===== 프록시 비디오 로드 (핵심 수정) =====
         async function loadProxyVideo(videoId) {
-            var cookie = getSavedCookie();
+            const cookie = localStorage.getItem("yt_cookie");
             if (!cookie) {
-                log("⚠️ 쿠키가 설정되지 않았습니다. Vercel에서는 영상 분석이 실패할 수 있습니다.");
+                log("⚠️ 로그인이 필요합니다! 상단의 '유튜브 로그인' 과정을 먼저 진행해주세요.");
+                setStatus("❌ 로그인 필요", "error");
+                return;
             }
 
             setStatus("⏳ 영상 분석 스트림 로딩 중...", "loading");
-            var url = "/api/video-stream/" + videoId;
-
             try {
-                // 쿠키를 헤더에 담아 전송하여 Vercel API가 사용하도록 함
-                const response = await fetch(url, {
-                    headers: {
-                        "x-youtube-cookie": cookie
-                    }
+                const response = await fetch(`/api/video-stream/${videoId}`, {
+                    headers: { "x-youtube-cookie": cookie }
                 });
 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || "프록시 서버 오류");
-                }
+                if (!response.ok) throw new Error("분석 스트림 로드 실패 (로그인 만료 가능성)");
 
-                // 302 리다이렉트나 스트림 URL을 받음
-                // 리다이렉트 응답일 경우 fetch가 자동으로 따라가지만, 
-                // 비디오 소스로 직접 쓰기 위해 URL을 가져옴
                 proxyVideo.src = response.url;
                 proxyVideo.load();
-
                 proxyVideo.onloadeddata = () => {
-                    log("✅ 분석용 영상 스트림 로드 완료");
+                    log("✅ 분석용 스트림 로드 완료");
                     poseCanvas.width = proxyVideo.videoWidth;
                     poseCanvas.height = proxyVideo.videoHeight;
-                    setStatus("✅ 포즈 감지 준비 완료!", "ok");
-                    if (poseEnabled) startPoseLoop();
+                    setStatus("✅ 포즈 감지 중...", "ok");
+                    startPoseLoop();
                 };
-
-                proxyVideo.onerror = (e) => {
-                    log("❌ 영상 소스 오류 (CORS/차단)");
-                    setStatus("❌ 분석 스트림 로드 실패", "error");
-                };
-
             } catch (e) {
-                log("❌ 프록시 요청 실패: " + e.message);
-                setStatus("❌ 인증 실패 또는 봇 차단 발생", "error");
+                log(`❌ 오류: ${e.message}`);
+                setStatus("❌ 오류 발생", "error");
             }
         }
 
-        // ===== YouTube API =====
-        async function main() {
-            log("🚀 초기화 중...");
-            try {
-                await loadYouTubeAPI();
-                ytPlayer = new YT.Player("player", {
-                    height: "100%", width: "100%", videoId: VIDEO_ID,
-                    playerVars: { playsinline: 1, rel: 0, enablejsapi: 1 },
-                    events: { onReady: () => log("✅ 플레이어 준비 완료") }
-                });
-
-                await initMediaPipe();
-                loadProxyVideo(VIDEO_ID);
-            } catch (e) { log("❌ 초기화 오류: " + e.message); }
-        }
-
-        // MediaPipe & Loop (생략 없이 유지)
+        // ===== MediaPipe & Loop =====
         async function initMediaPipe() {
+            log("MediaPipe 로딩 중...");
             try {
-                var vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
-                var FilesetResolver = vision.FilesetResolver;
-                var PoseLandmarker = vision.PoseLandmarker;
-                var resolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
-                poseLandmarker = await PoseLandmarker.createFromOptions(resolver, {
+                const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
+                const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
+                poseLandmarker = await vision.PoseLandmarker.createFromOptions(resolver, {
                     baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task", delegate: "GPU" },
                     runningMode: "VIDEO", numPoses: 1
                 });
-                poseConnections = PoseLandmarker.POSE_CONNECTIONS;
-                log("✅ MediaPipe 로드 완료");
+                poseConnections = vision.PoseLandmarker.POSE_CONNECTIONS;
+                log("✅ MediaPipe 준비 완료");
                 return true;
-            } catch (e) { log("❌ MediaPipe 오류"); return false; }
+            } catch (e) { log("❌ MediaPipe 로드 실패"); return false; }
         }
 
         function startPoseLoop() {
             if (animFrameId) return;
             function loop() {
-                var active = getActiveVideo();
-                if (poseEnabled && active.readyState >= 2 && !active.paused && poseLandmarker) {
-                    var result = poseLandmarker.detectForVideo(active, performance.now());
+                const active = currentMode === "file" ? localVideo : proxyVideo;
+                if (active.readyState >= 2 && !active.paused && poseLandmarker) {
+                    const result = poseLandmarker.detectForVideo(active, performance.now());
                     canvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
                     if (result.landmarks && result.landmarks[0]) drawPose(result.landmarks[0]);
                 }
@@ -494,7 +458,7 @@
             canvasCtx.strokeStyle = "rgba(0, 255, 0, 0.8)";
             canvasCtx.lineWidth = 4;
             poseConnections.forEach(c => {
-                var s = landmarks[c.start], e = landmarks[c.end];
+                const s = landmarks[c.start], e = landmarks[c.end];
                 if (s.visibility > 0.5 && e.visibility > 0.5) {
                     canvasCtx.beginPath();
                     canvasCtx.moveTo(s.x * poseCanvas.width, s.y * poseCanvas.height);
@@ -513,23 +477,29 @@
             canvasCtx.restore();
         }
 
-        window.handleTogglePose = function () {
-            poseEnabled = !poseEnabled;
-            btnTogglePose.textContent = poseEnabled ? "🦴 포즈감지: ON" : "🦴 포즈감지: OFF";
-            btnTogglePose.classList.toggle("active", poseEnabled);
-            if (!poseEnabled) canvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-        };
+        // ===== 초기화 =====
+        async function main() {
+            try {
+                setStatus("⏳ 초기화 중...", "loading");
+                window.onYouTubeIframeAPIReady = async () => {
+                    log("✅ YouTube API 준비 완료");
+                    ytPlayer = new YT.Player("player", {
+                        height: "100%", width: "100%", videoId: VIDEO_ID,
+                        playerVars: { playsinline: 1, rel: 0, enablejsapi: 1 },
+                        events: { onReady: () => log("✅ 플레이어 준비 완료") }
+                    });
 
-        main();
-
-        function loadYouTubeAPI() {
-            return new Promise((res) => {
-                window.onYouTubeIframeAPIReady = res;
-                var s = document.createElement("script");
+                    if (await initMediaPipe()) {
+                        setStatus("✅ 준비 완료! 로그인 후 영상을 로드하세요.", "ok");
+                        if (localStorage.getItem("yt_cookie")) loadProxyVideo(VIDEO_ID);
+                    }
+                };
+                const s = document.createElement("script");
                 s.src = "https://www.youtube.com/iframe_api";
                 document.body.appendChild(s);
-            });
+            } catch (e) { log(`초기화 오류: ${e.message}`); }
         }
+        main();
     </script>
 </body>
 
