@@ -110,6 +110,7 @@
             border: 0;
             display: none;
             z-index: 2;
+            isolation: isolate;
         }
 
         .preview-window.youtube-capture-mode #mainVideo {
@@ -417,6 +418,7 @@
         let captureStream = null;
         let captureModeLoaded = false;
         let captureModeActive = false;
+        let captureUsesRestriction = false;
 
         const previewWindow = document.querySelector(".preview-window");
         const mainVideo = document.getElementById("mainVideo");
@@ -471,15 +473,20 @@
             youtubeCaptureError.style.display = "none";
         }
 
+        function supportsElementRestriction() {
+            return "RestrictionTarget" in window
+                && typeof RestrictionTarget.fromElement === "function";
+        }
+
         function getCaptureConstraints() {
             return {
                 video: {
-                    displaySurface: "browser",
-                    preferCurrentTab: true,
-                    selfBrowserSurface: "include",
-                    surfaceSwitching: "include"
+                    displaySurface: "browser"
                 },
-                audio: false
+                audio: false,
+                preferCurrentTab: true,
+                selfBrowserSurface: "include",
+                surfaceSwitching: "include"
             };
         }
 
@@ -515,6 +522,7 @@
                 captureFrameId = null;
             }
             captureModeActive = false;
+            captureUsesRestriction = false;
             if (captureStream) {
                 captureStream.getTracks().forEach((track) => track.stop());
                 captureStream = null;
@@ -626,6 +634,25 @@
                 captureStream = await navigator.mediaDevices.getDisplayMedia(getCaptureConstraints());
                 const [track] = captureStream.getVideoTracks();
                 if (track) {
+                    const displaySurface = track.getSettings?.().displaySurface || "";
+                    if (displaySurface && displaySurface !== "browser") {
+                        stopCaptureAnalysis({
+                            keepIframe: true,
+                            statusMessage: "ℹ️ 현재 탭을 선택해야 04 캡처 분석이 시작됩니다."
+                        });
+                        showCaptureError("현재 탭이 아닌 창/화면을 선택했습니다. 다시 시작해서 이 탭을 선택해 주세요.");
+                        return;
+                    }
+                    if (supportsElementRestriction() && typeof track.restrictTo === "function") {
+                        try {
+                            const restrictionTarget = await RestrictionTarget.fromElement(youtubeFrame);
+                            await track.restrictTo(restrictionTarget);
+                            captureUsesRestriction = true;
+                        } catch (restrictionError) {
+                            captureUsesRestriction = false;
+                            console.warn("Element Capture fallback:", restrictionError);
+                        }
+                    }
                     track.onended = () => {
                         stopCaptureAnalysis({ keepIframe: true, statusMessage: "⏹️ 캡처가 종료되었습니다. 다시 시작하려면 버튼을 누르세요." });
                     };
@@ -637,6 +664,7 @@
                 updateCaptureButton(true);
                 aiOverlay.textContent = "🔍 인물 찾는 중...";
                 aiOverlay.style.display = "block";
+                previewHint.style.display = "none";
                 setStatus("🎯 현재 탭 캡처 분석 중...", "#4ade80", "#4ade80");
                 stopAnalysisLoop();
                 startCaptureLoop();
@@ -666,6 +694,25 @@
                 captureStream = await navigator.mediaDevices.getDisplayMedia(getCaptureConstraints());
                 const [track] = captureStream.getVideoTracks();
                 if (track) {
+                    const displaySurface = track.getSettings?.().displaySurface || "";
+                    if (displaySurface && displaySurface !== "browser") {
+                        stopCaptureAnalysis({
+                            keepIframe: true,
+                            statusMessage: "ℹ️ 현재 탭을 선택해야 04 캡처 분석이 시작됩니다."
+                        });
+                        showCaptureError("현재 탭이 아닌 창/화면을 선택했습니다. 다시 시작해서 이 탭을 선택해 주세요.");
+                        return;
+                    }
+                    if (supportsElementRestriction() && typeof track.restrictTo === "function") {
+                        try {
+                            const restrictionTarget = await RestrictionTarget.fromElement(youtubeFrame);
+                            await track.restrictTo(restrictionTarget);
+                            captureUsesRestriction = true;
+                        } catch (restrictionError) {
+                            captureUsesRestriction = false;
+                            console.warn("Element Capture fallback:", restrictionError);
+                        }
+                    }
                     track.onended = () => {
                         stopCaptureAnalysis({ keepIframe: true, statusMessage: "⏹️ 캡처가 종료되었습니다. 다시 시작하려면 버튼을 누르세요." });
                     };
@@ -677,6 +724,7 @@
                 updateCaptureButton(true);
                 aiOverlay.textContent = "🔍 인물 찾는 중...";
                 aiOverlay.style.display = "block";
+                previewHint.style.display = "none";
                 setStatus("🎯 현재 탭 캡처 분석 중...", "#4ade80", "#4ade80");
                 stopAnalysisLoop();
                 startCaptureLoop();
@@ -821,6 +869,15 @@
             }
         }
 
+        function getCaptureCropRect(displaySurface, captureWidth, captureHeight) {
+            const { tx, ty, tw, th } = getCaptureTransform(displaySurface);
+            const sx = Math.max(0, Math.round(tx * captureWidth));
+            const sy = Math.max(0, Math.round(ty * captureHeight));
+            const sw = Math.max(1, Math.round(tw * captureWidth));
+            const sh = Math.max(1, Math.round(th * captureHeight));
+            return { sx, sy, sw, sh };
+        }
+
         function startLoop() {
             function loop() {
                 if (mainVideo.readyState >= 2 && !mainVideo.paused && poseLandmarker) {
@@ -870,14 +927,23 @@
                         }
                         lastTime = now;
 
-                        // 전체 캡처를 640px 폭으로 스케일 (크롭 없음)
                         const cw = captureVideo.videoWidth || 640;
                         const ch = captureVideo.videoHeight || 480;
+                        let sx = 0;
+                        let sy = 0;
+                        let sw = cw;
+                        let sh = ch;
+
+                        if (!captureUsesRestriction) {
+                            const surface = captureStream?.getVideoTracks?.()[0]?.getSettings?.().displaySurface || "browser";
+                            ({ sx, sy, sw, sh } = getCaptureCropRect(surface, cw, ch));
+                        }
+
                         const offW = 640;
-                        const offH = Math.max(1, Math.round(offW * ch / cw));
+                        const offH = Math.max(1, Math.round(offW * sh / sw));
                         offscreenCanvas.width = offW;
                         offscreenCanvas.height = offH;
-                        offCtx.drawImage(captureVideo, 0, 0, cw, ch, 0, 0, offW, offH);
+                        offCtx.drawImage(captureVideo, sx, sy, sw, sh, 0, 0, offW, offH);
 
                         poseCanvas.width = previewWindow.clientWidth || 640;
                         poseCanvas.height = previewWindow.clientHeight || 360;
@@ -885,15 +951,7 @@
                         ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
 
                         if (result.landmarks && result.landmarks.length > 0) {
-                            // 랜드마크를 viewport 기준 [0,1] → iframe 기준 [0,1] 역변환
-                            const surface = captureStream?.getVideoTracks?.()[0]?.getSettings?.().displaySurface || "browser";
-                            const { tx, ty, tw, th } = getCaptureTransform(surface);
-                            const mapped = result.landmarks[0].map(p => ({
-                                ...p,
-                                x: (p.x - tx) / tw,
-                                y: (p.y - ty) / th
-                            }));
-                            drawPose(mapped);
+                            drawPose(result.landmarks[0]);
                             aiOverlay.style.display = "none";
                         } else {
                             aiOverlay.textContent = "🔍 인물 찾는 중...";
