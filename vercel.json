@@ -7,12 +7,20 @@
         {
             "src": "api/video-stream.js",
             "use": "@vercel/node"
+        },
+        {
+            "src": "api/youtube-url.js",
+            "use": "@vercel/node"
         }
     ],
     "routes": [
         {
             "src": "/api/video-stream",
             "dest": "/api/video-stream.js"
+        },
+        {
+            "src": "/api/youtube-url",
+            "dest": "/api/youtube-url.js"
         },
         {
             "src": "/(.*)",

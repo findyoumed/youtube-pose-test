@@ -216,6 +216,45 @@ app.get("/api/video-stream", async function (req, res) {
     fetchWithRedirect(parsedUrl.toString(), 0);
 });
 
+app.get("/api/youtube-url", async function (req, res) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    if (req.method === "OPTIONS") { res.status(200).end(); return; }
+
+    var videoId = req.query.videoId;
+    if (!videoId) { sendJsonError(res, 400, "videoId required"); return; }
+
+    var id = extractYouTubeId(videoId);
+    if (!id) { sendJsonError(res, 400, "Invalid videoId"); return; }
+
+    var yt = await getInnertube();
+    var lastError = null;
+
+    for (const client of YT_DOWNLOAD_CLIENTS) {
+        try {
+            console.log(`🔍 youtube-url: ${id} via ${client}`);
+            const info = await yt.getBasicInfo(id, client);
+            const formats = [
+                ...(info.streaming_data?.formats || []),
+                ...(info.streaming_data?.adaptive_formats || [])
+            ];
+            const format = formats.find(f => f.itag === 18)
+                        || formats.find(f => f.mime_type?.startsWith("video/mp4"));
+            if (!format) throw new Error("No suitable format");
+            const url = format.decipher(yt.session.player);
+            const mimeType = (format.mime_type || "video/mp4").split(";")[0].trim();
+            console.log(`✅ URL extracted via ${client}`);
+            res.status(200).json({ url, mimeType });
+            return;
+        } catch (err) {
+            lastError = err;
+            console.error(`⚠️ ${client}:`, err?.message);
+        }
+    }
+
+    sendJsonError(res, 502, lastError?.message || "URL extraction failed");
+});
+
 app.listen(PORT, "0.0.0.0", function () {
     console.log("=================================");
     console.log("Pose Test Server (youtubei.js)");
