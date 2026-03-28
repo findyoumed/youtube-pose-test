@@ -1,4 +1,4 @@
-// [LOG: 20260328] Universal Video/CORS Proxy + YouTube via Invidious
+// [LOG: 20260328] Universal Video/CORS Proxy + YouTube via Invidious + Cobalt fallback
 import fetch from "node-fetch";
 
 function extractYouTubeId(input) {
@@ -17,17 +17,18 @@ function extractYouTubeId(input) {
 }
 
 const INVIDIOUS_INSTANCES = [
-    "https://inv.tux.rs",
-    "https://invidious.nerdvpn.de",
-    "https://yt.cdaut.de",
-    "https://invidious.slipfox.xyz"
+    "https://yewtu.be",
+    "https://invidious.io",
+    "https://inv.riverside.rocks",
+    "https://invidious.privacydev.net",
+    "https://vid.puffyan.us"
 ];
 
 async function getYouTubeStreamUrl(videoId) {
     const tryInstance = async (instance) => {
         const res = await fetch(`${instance}/api/v1/videos/${videoId}`, {
             headers: { "User-Agent": "Mozilla/5.0" },
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(4000)
         });
         if (!res.ok) throw new Error(`${res.status}`);
         const data = await res.json();
@@ -40,6 +41,31 @@ async function getYouTubeStreamUrl(videoId) {
         return stream.url;
     };
     return Promise.any(INVIDIOUS_INSTANCES.map(tryInstance)).catch(() => null);
+}
+
+async function getYouTubeUrlViaCobalt(videoId) {
+    try {
+        const res = await fetch("https://api.cobalt.tools/", {
+            method: "POST",
+            headers: {
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                url: `https://www.youtube.com/watch?v=${videoId}`,
+                videoQuality: "360"
+            }),
+            signal: AbortSignal.timeout(5000)
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if ((data.status === "redirect" || data.status === "stream") && data.url) {
+            return data.url;
+        }
+        return null;
+    } catch {
+        return null;
+    }
 }
 
 export default async function handler(req, res) {
@@ -67,16 +93,24 @@ export default async function handler(req, res) {
         }
     }
 
-    // [Case 2] YouTube (Invidious JSON API → redirect to direct stream URL)
+    // [Case 2] YouTube: Invidious → Cobalt 순으로 시도
     if (videoId) {
         const id = extractYouTubeId(videoId);
         if (!id) return res.status(400).json({ error: "유효하지 않은 YouTube videoId입니다" });
 
         console.log(`🎬 Resolving YouTube: ${id}`);
-        const streamUrl = await getYouTubeStreamUrl(id);
+
+        // 1차: Invidious (병렬)
+        let streamUrl = await getYouTubeStreamUrl(id);
+
+        // 2차: Cobalt fallback
+        if (!streamUrl) {
+            console.log("⚠️ Invidious 실패 → Cobalt fallback...");
+            streamUrl = await getYouTubeUrlViaCobalt(id);
+        }
 
         if (!streamUrl) {
-            return res.status(502).json({ error: "모든 Invidious 인스턴스에서 영상 URL을 가져오지 못했습니다" });
+            return res.status(502).json({ error: "YouTube 스트림 URL 획득 실패 (Invidious + Cobalt 모두 실패)" });
         }
 
         console.log(`✅ Redirecting to: ${streamUrl.substring(0, 80)}...`);
