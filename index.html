@@ -370,10 +370,10 @@
             <!-- [Case 3] YouTube -->
             <div class="selection-card">
                 <h3><span>03</span> YouTube</h3>
-                <p>유튜브 URL은 현재 같은 페이지에서 미리보기만 지원합니다. 분석은 파일 또는 다운로드 가능한 영상 링크로만 동작합니다.</p>
+                <p>YouTube URL을 입력하면 서버를 통해 영상을 불러와 포즈 분석을 시작합니다.</p>
                 <div class="input-row">
                     <input type="text" id="youtubeInput" placeholder="https://youtube.com/watch?v=..." value="https://www.youtube.com/watch?v=8a9M0lNY37s">
-                    <button class="btn-main" onclick="window.loadFromYouTube()">미리보기</button>
+                    <button class="btn-main" onclick="window.loadFromYouTube()">분석</button>
                 </div>
                 <div id="youtubeError" style="display:none; color:#ef4444; font-size:12px; margin-top:4px;"></div>
             </div>
@@ -484,8 +484,7 @@
             return null;
         }
 
-        // [화면 캡처 분석 시작]
-        // [YouTube 로드 로직]
+        // [YouTube 로드 로직] - 서버 프록시로 직접 분석
         window.loadFromYouTube = () => {
             youtubeError.style.display = "none";
             const videoId = extractYouTubeId(youtubeInput.value.trim());
@@ -495,10 +494,10 @@
                 return;
             }
             prepareAnalysisSource();
-            previewWindow.classList.add("youtube-mode");
-            previewHint.style.display = "block";
-            youtubeFrame.src = `https://www.youtube.com/embed/${videoId}?playsinline=1&rel=0`;
-            setStatus("ℹ️ YouTube는 현재 미리보기만 지원합니다. 분석하려면 파일, Drive 다운로드 링크, 또는 MP4 URL을 사용하세요.", "#a16207", "#fbbf24");
+            statusEl.innerHTML = '<span class="spinner"></span> YouTube 영상 로딩 중...';
+            mainVideo.crossOrigin = "anonymous";
+            mainVideo.src = `/api/video-stream?videoId=${videoId}`;
+            mainVideo.load();
         };
 
         // [URL 로드 로직]
@@ -539,7 +538,7 @@
 
         // [공통 로드 완료]
         mainVideo.onloadeddata = () => {
-            if (!mainVideo.currentSrc || previewWindow.classList.contains("youtube-mode")) return;
+            if (!mainVideo.currentSrc) return;
             poseCanvas.width = mainVideo.videoWidth;
             poseCanvas.height = mainVideo.videoHeight;
             offscreenCanvas.width = 640;
@@ -568,7 +567,7 @@
                     runningMode: "VIDEO", numPoses: 1
                 });
                 poseConnections = vision.PoseLandmarker.POSE_CONNECTIONS;
-                if (!previewWindow.classList.contains("youtube-mode") && !mainVideo.currentSrc) {
+                if (!mainVideo.currentSrc) {
                     setStatus(`✅ AI (${delegateType} 모드) 준비 완료!`, "#4ade80", "#4ade80");
                 }
             } catch (e) {
