@@ -93,7 +93,16 @@ app.get("/api/video-stream", async function (req, res) {
             var streamUrl = format.decipher(yt.session.player);
             console.log("✅ youtubei.js 성공, streaming:", streamUrl.substring(0, 80));
 
-            https.get(streamUrl, { headers: { "User-Agent": "Mozilla/5.0" } }, function(upstream) {
+            https.get(streamUrl, {
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Referer": "https://www.youtube.com/",
+                    "Accept": "*/*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Dest": "video"
+                }
+            }, function(upstream) {
                 res.status(upstream.statusCode || 200);
                 res.setHeader("Content-Type", upstream.headers["content-type"] || "video/mp4");
                 res.setHeader("Accept-Ranges", "bytes");

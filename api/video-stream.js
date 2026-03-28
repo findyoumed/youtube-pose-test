@@ -105,7 +105,14 @@ export default async function handler(req, res) {
 
             // 스트리밍 프록시 (첫 바이트 전송 후 Vercel timeout 미적용)
             https.get(streamUrl, {
-                headers: { 'User-Agent': 'Mozilla/5.0' }
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Referer': 'https://www.youtube.com/',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Dest': 'video'
+                }
             }, (upstream) => {
                 res.status(upstream.statusCode || 200);
                 res.setHeader('Content-Type', upstream.headers['content-type'] || 'video/mp4');
