@@ -98,6 +98,14 @@
             object-fit: contain;
         }
 
+        #ytIframe {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            border: 0;
+            z-index: 1;
+        }
+
         #poseCanvas {
             position: absolute;
             top: 0;
@@ -300,6 +308,7 @@
 
         <div class="preview-window">
             <video id="mainVideo" playsinline controls></video>
+            <iframe id="ytIframe" allow="autoplay; encrypted-media; fullscreen"></iframe>
             <canvas id="poseCanvas"></canvas>
             <div id="aiOverlay">🔍 인물 탐색 중...</div>
         </div>
@@ -332,11 +341,12 @@
             <!-- [Case 3] YouTube -->
             <div class="selection-card">
                 <h3><span>03</span> YouTube</h3>
-                <p>유튜브 URL을 붙여넣으세요. Invidious 인스턴스를 통해 CORS 없이 분석합니다.</p>
+                <p>유튜브 URL을 붙여넣으세요. 화면 캡처로 CORS 없이 분석합니다.</p>
                 <div class="input-row">
                     <input type="text" id="youtubeInput" placeholder="https://youtube.com/watch?v=..." value="https://www.youtube.com/watch?v=8a9M0lNY37s">
-                    <button class="btn-main" onclick="window.loadFromYouTube()">분석</button>
+                    <button class="btn-main" onclick="window.loadFromYouTube()">재생</button>
                 </div>
+                <button id="captureBtn" class="btn-main" style="display:none; width:100%; margin-top:8px;" onclick="window.startScreenCapture()">📸 포즈 분석 시작 (화면 캡처)</button>
                 <div id="youtubeError" style="display:none; color:#ef4444; font-size:12px; margin-top:4px;"></div>
             </div>
         </div>
@@ -355,9 +365,12 @@
         let poseLandmarker = null;
         let poseConnections = null;
         let animFrameId = null;
+        let screenCaptureMode = false;
 
         const mainVideo = document.getElementById("mainVideo");
         const poseCanvas = document.getElementById("poseCanvas");
+        const ytIframe = document.getElementById("ytIframe");
+        const captureBtn = document.getElementById("captureBtn");
         const videoInput = document.getElementById("videoInput");
         const urlInput = document.getElementById("urlInput");
         const youtubeInput = document.getElementById("youtubeInput");
@@ -383,6 +396,37 @@
             }
             return null;
         }
+
+        // [화면 캡처 분석 시작]
+        window.startScreenCapture = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    preferCurrentTab: true,
+                    selfBrowserSurface: "include",
+                    audio: false
+                });
+                mainVideo.srcObject = stream;
+                mainVideo.muted = true;
+                screenCaptureMode = true;
+                captureBtn.style.display = "none";
+                poseCanvas.width = 640;
+                poseCanvas.height = 480;
+                offscreenCanvas.width = 640;
+                offscreenCanvas.height = 480;
+                statusEl.textContent = "🎯 화면 캡처 분석 중...";
+                statusEl.style.borderColor = "#4ade80";
+                statusEl.style.color = "#4ade80";
+                await mainVideo.play();
+                if (animFrameId) cancelAnimationFrame(animFrameId);
+                startLoop();
+            } catch (e) {
+                if (e.name !== "NotAllowedError") {
+                    statusEl.textContent = "❌ 화면 캡처 실패: " + e.message;
+                    statusEl.style.color = "#ef4444";
+                }
+            }
+        };
 
         // [클라이언트 사이드 YouTube URL 해석 - Cobalt > Piped > Invidious 순]
         async function resolveYouTubeClientSide(videoId) {
@@ -470,8 +514,8 @@
             return null;
         }
 
-        // [YouTube 로드 로직]
-        window.loadFromYouTube = async () => {
+        // [YouTube 로드 로직 - IFrame 방식]
+        window.loadFromYouTube = () => {
             youtubeError.style.display = "none";
             const input = youtubeInput.value.trim();
             if (!input) return alert("YouTube URL을 입력해 주세요.");
@@ -483,34 +527,38 @@
                 return;
             }
 
-            statusEl.innerHTML = '<span class="spinner"></span> YouTube URL 해석 중...';
+            // 이전 화면 캡처 정리
+            if (mainVideo.srcObject) {
+                mainVideo.srcObject.getTracks().forEach(t => t.stop());
+                mainVideo.srcObject = null;
+            }
+            screenCaptureMode = false;
+
+            ytIframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+            ytIframe.style.display = "block";
+            mainVideo.style.visibility = "hidden";
+            captureBtn.style.display = "block";
+            statusEl.textContent = "▶ YouTube 재생 중 → [포즈 분석 시작] 버튼을 클릭하세요";
             statusEl.style.borderColor = "#1e40af";
             statusEl.style.color = "#60a5fa";
-
-            // 브라우저에서 직접 Invidious/Piped 호출 (서버 IP 차단 우회)
-            const streamUrl = await resolveYouTubeClientSide(videoId);
-            console.log("YouTube stream resolved:", streamUrl ? streamUrl.substring(0, 80) + "..." : "null (fallback to server)");
-
-            mainVideo.crossOrigin = "anonymous";
-            if (streamUrl) {
-                // 성공: 우리 프록시를 통해 로드 (CORS 보장)
-                mainVideo.src = `/api/video-stream?url=${encodeURIComponent(streamUrl)}`;
-            } else {
-                // 실패: 서버사이드 fallback
-                mainVideo.src = `/api/video-stream?videoId=${videoId}`;
-            }
-            mainVideo.load();
-
-            mainVideo.onerror = () => {
-                statusEl.textContent = "❌ YouTube 영상 로드 실패.";
-                statusEl.style.color = "#ef4444";
-                youtubeError.textContent = "영상을 불러오지 못했습니다. 다른 URL을 시도하거나 잠시 후 다시 시도해 주세요.";
-                youtubeError.style.display = "block";
-            };
         };
+
+        // [YouTube 모드 리셋 헬퍼]
+        function resetYouTubeMode() {
+            if (mainVideo.srcObject) {
+                mainVideo.srcObject.getTracks().forEach(t => t.stop());
+                mainVideo.srcObject = null;
+            }
+            screenCaptureMode = false;
+            ytIframe.style.display = "none";
+            ytIframe.src = "";
+            mainVideo.style.visibility = "visible";
+            captureBtn.style.display = "none";
+        }
 
         // [URL 로드 로직]
         window.loadFromUrl = () => {
+            resetYouTubeMode();
             let url = urlInput.value.trim();
             if (!url) return alert("URL을 입력해 주세요.");
             statusEl.innerHTML = '<span class="spinner"></span> 외부 영상 로딩 중...';
@@ -536,6 +584,7 @@
         videoInput.addEventListener("change", (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            resetYouTubeMode();
             mainVideo.crossOrigin = null;
             mainVideo.src = URL.createObjectURL(file);
             mainVideo.load();
@@ -601,7 +650,17 @@
                         const now = performance.now();
                         if (now - lastTime < 40) { animFrameId = requestAnimationFrame(loop); return; }
                         lastTime = now;
-                        offCtx.drawImage(mainVideo, 0, 0, 640, 480);
+                        if (screenCaptureMode) {
+                            const rect = ytIframe.getBoundingClientRect();
+                            const scaleX = mainVideo.videoWidth / window.innerWidth;
+                            const scaleY = mainVideo.videoHeight / window.innerHeight;
+                            offCtx.drawImage(mainVideo,
+                                Math.round(rect.left * scaleX), Math.round(rect.top * scaleY),
+                                Math.round(rect.width * scaleX), Math.round(rect.height * scaleY),
+                                0, 0, 640, 480);
+                        } else {
+                            offCtx.drawImage(mainVideo, 0, 0, 640, 480);
+                        }
                         const result = poseLandmarker.detectForVideo(offscreenCanvas, now);
                         ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
                         if (result.landmarks && result.landmarks.length > 0) {
