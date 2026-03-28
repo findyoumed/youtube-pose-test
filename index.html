@@ -384,8 +384,43 @@
             return null;
         }
 
+        // [클라이언트 사이드 YouTube URL 해석 - Vercel 서버 IP 차단 우회]
+        async function resolveYouTubeClientSide(videoId) {
+            const INSTANCES = [
+                "https://yewtu.be",
+                "https://invidious.io",
+                "https://inv.riverside.rocks",
+                "https://invidious.privacydev.net",
+                "https://vid.puffyan.us"
+            ];
+
+            const invTries = INSTANCES.map(async inst => {
+                const res = await fetch(`${inst}/api/v1/videos/${videoId}`, { signal: AbortSignal.timeout(5000) });
+                if (!res.ok) throw new Error(res.status);
+                const data = await res.json();
+                const s = data.formatStreams?.find(f => String(f.itag) === "18")
+                       || data.formatStreams?.find(f => String(f.itag) === "22")
+                       || data.formatStreams?.[0];
+                if (!s?.url) throw new Error("no url");
+                return s.url;
+            });
+
+            const pipedTry = (async () => {
+                const res = await fetch(`https://pipedapi.kavin.rocks/streams/${videoId}`, { signal: AbortSignal.timeout(5000) });
+                if (!res.ok) throw new Error(res.status);
+                const data = await res.json();
+                const s = data.videoStreams?.find(s => s.quality === "360p" && s.mimeType?.includes("mp4"))
+                       || data.videoStreams?.find(s => s.mimeType?.includes("mp4"))
+                       || data.videoStreams?.[0];
+                if (!s?.url) throw new Error("no url");
+                return s.url;
+            })();
+
+            return Promise.any([...invTries, pipedTry]).catch(() => null);
+        }
+
         // [YouTube 로드 로직]
-        window.loadFromYouTube = () => {
+        window.loadFromYouTube = async () => {
             youtubeError.style.display = "none";
             const input = youtubeInput.value.trim();
             if (!input) return alert("YouTube URL을 입력해 주세요.");
@@ -397,12 +432,22 @@
                 return;
             }
 
-            statusEl.innerHTML = '<span class="spinner"></span> YouTube 영상 로딩 중...';
+            statusEl.innerHTML = '<span class="spinner"></span> YouTube URL 해석 중...';
             statusEl.style.borderColor = "#1e40af";
             statusEl.style.color = "#60a5fa";
 
+            // 브라우저에서 직접 Invidious/Piped 호출 (서버 IP 차단 우회)
+            const streamUrl = await resolveYouTubeClientSide(videoId);
+            console.log("YouTube stream resolved:", streamUrl ? streamUrl.substring(0, 80) + "..." : "null (fallback to server)");
+
             mainVideo.crossOrigin = "anonymous";
-            mainVideo.src = `/api/video-stream?videoId=${videoId}`;
+            if (streamUrl) {
+                // 성공: 우리 프록시를 통해 로드 (CORS 보장)
+                mainVideo.src = `/api/video-stream?url=${encodeURIComponent(streamUrl)}`;
+            } else {
+                // 실패: 서버사이드 fallback
+                mainVideo.src = `/api/video-stream?videoId=${videoId}`;
+            }
             mainVideo.load();
 
             mainVideo.onerror = () => {
