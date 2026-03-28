@@ -1,20 +1,30 @@
+import { Innertube } from 'youtubei.js';
 import express from "express";
 import https from "https";
 import http from "http";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 
-var BLOCKED_MEDIA_HOSTS = [
-    /(^|\.)youtube\.com$/i,
-    /(^|\.)youtu\.be$/i,
-    /(^|\.)youtube-nocookie\.com$/i,
-    /(^|\.)googlevideo\.com$/i
-];
+// 모듈 레벨 캐시 (warm request에서 재사용)
+var ytInstance = null;
+async function getInnertube() {
+    if (!ytInstance) ytInstance = await Innertube.create({ retrieve_player: true });
+    return ytInstance;
+}
 
-function isBlockedMediaHost(hostname) {
-    return BLOCKED_MEDIA_HOSTS.some(function (pattern) {
-        return pattern.test(hostname || "");
-    });
+function extractYouTubeId(input) {
+    var patterns = [
+        /[?&]v=([A-Za-z0-9_-]{11})/,
+        /youtu\.be\/([A-Za-z0-9_-]{11})/,
+        /shorts\/([A-Za-z0-9_-]{11})/,
+        /embed\/([A-Za-z0-9_-]{11})/,
+        /^([A-Za-z0-9_-]{11})$/
+    ];
+    for (var p of patterns) {
+        var m = input.match(p);
+        if (m) return m[1];
+    }
+    return null;
 }
 
 function normalizeDriveUrl(url) {
@@ -53,36 +63,58 @@ var PORT = 3001;
 
 app.use(express.static(__dirname));
 
-app.get("/api/video-stream/:videoId", function (req, res) {
-    sendJsonError(
-        res,
-        400,
-        "YouTube videoId input is no longer supported. Use a downloadable video URL instead."
-    );
-});
+app.get("/api/video-stream", async function (req, res) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Range");
 
-app.get("/api/video-stream", function (req, res) {
+    if (req.method === "OPTIONS") { res.status(200).end(); return; }
+
+    // [Case 1] YouTube videoId → youtubei.js
     if (req.query.videoId) {
-        sendJsonError(
-            res,
-            400,
-            "YouTube videoId input is no longer supported. Use a downloadable video URL instead."
-        );
+        var id = extractYouTubeId(req.query.videoId);
+        if (!id) { sendJsonError(res, 400, "Invalid videoId"); return; }
+
+        try {
+            console.log("🎬 youtubei.js resolving:", id);
+            var yt = await getInnertube();
+            var info = await yt.getBasicInfo(id, 'WEB');
+            var formats = [
+                ...(info.streaming_data?.formats || []),
+                ...(info.streaming_data?.adaptive_formats || [])
+            ];
+
+            var format = formats.find(function(f) { return f.itag === 18; })
+                      || formats.find(function(f) { return f.mime_type?.includes('video/mp4') && f.has_audio && f.has_video; })
+                      || formats[0];
+
+            if (!format) throw new Error("No suitable format found");
+
+            var streamUrl = format.decipher(yt.session.player);
+            console.log("✅ youtubei.js 성공, streaming:", streamUrl.substring(0, 80));
+
+            https.get(streamUrl, { headers: { "User-Agent": "Mozilla/5.0" } }, function(upstream) {
+                res.status(upstream.statusCode || 200);
+                res.setHeader("Content-Type", upstream.headers["content-type"] || "video/mp4");
+                res.setHeader("Accept-Ranges", "bytes");
+                if (upstream.headers["content-length"]) res.setHeader("Content-Length", upstream.headers["content-length"]);
+                upstream.pipe(res);
+                req.on("close", function() { upstream.destroy(); });
+            }).on("error", function(e) {
+                if (!res.headersSent) sendJsonError(res, 500, e.message);
+            });
+
+        } catch(e) {
+            console.error("❌ youtubei.js 실패:", e.message);
+            if (!res.headersSent) sendJsonError(res, 502, e.message);
+        }
         return;
     }
 
+    // [Case 2] URL 프록시 (Google Drive 등)
     var parsedUrl = parseProxyUrl(req.query.url);
     if (!parsedUrl) {
-        sendJsonError(res, 400, "Invalid url parameter.");
-        return;
-    }
-
-    if (isBlockedMediaHost(parsedUrl.hostname)) {
-        sendJsonError(
-            res,
-            400,
-            "YouTube-hosted media cannot be proxied for analysis. Use a downloadable video source instead."
-        );
+        sendJsonError(res, 400, "videoId 또는 url 파라미터가 필요합니다.");
         return;
     }
 
@@ -95,14 +127,6 @@ app.get("/api/video-stream", function (req, res) {
         var parsedTarget = parseProxyUrl(targetUrl);
         if (!parsedTarget) {
             sendJsonError(res, 400, "Invalid redirected url.");
-            return;
-        }
-        if (isBlockedMediaHost(parsedTarget.hostname)) {
-            sendJsonError(
-                res,
-                400,
-                "The resolved media URL is hosted by YouTube and cannot be analyzed safely."
-            );
             return;
         }
 
@@ -124,7 +148,6 @@ app.get("/api/video-stream", function (req, res) {
                 return;
             }
 
-            res.setHeader("Access-Control-Allow-Origin", "*");
             res.status(proxyRes.statusCode || 200);
             res.setHeader("Content-Type", proxyRes.headers["content-type"] || "video/mp4");
             res.setHeader("Accept-Ranges", proxyRes.headers["accept-ranges"] || "bytes");
@@ -150,7 +173,7 @@ app.get("/api/video-stream", function (req, res) {
 
 app.listen(PORT, function () {
     console.log("=================================");
-    console.log("Pose Test Server");
+    console.log("Pose Test Server (youtubei.js)");
     console.log("http://localhost:" + PORT);
     console.log("=================================");
 });
