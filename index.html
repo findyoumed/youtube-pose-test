@@ -94,24 +94,30 @@
 
         #mainVideo,
         #youtubeFrame {
+            position: absolute;
+            inset: 0;
             width: 100%;
             height: 100%;
             object-fit: contain;
             background: #000;
         }
 
+        #mainVideo {
+            z-index: 1;
+        }
+
         #youtubeFrame {
             border: 0;
             display: none;
+            z-index: 2;
         }
 
-        .preview-window.youtube-mode #mainVideo,
-        .preview-window.youtube-mode #poseCanvas,
-        .preview-window.youtube-mode #aiOverlay {
-            display: none;
+        .preview-window.youtube-capture-mode #mainVideo {
+            visibility: hidden;
+            pointer-events: none;
         }
 
-        .preview-window.youtube-mode #youtubeFrame {
+        .preview-window.youtube-capture-mode #youtubeFrame {
             display: block;
         }
 
@@ -339,7 +345,7 @@
                 referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
             <canvas id="poseCanvas"></canvas>
             <div id="aiOverlay">🔍 인물 탐색 중...</div>
-            <div id="previewHint">YouTube는 현재 미리보기만 지원합니다. 분석하려면 파일, Google Drive 다운로드 링크, 또는 CORS 허용 MP4 URL을 사용하세요.</div>
+            <div id="previewHint">04 캡처 모드는 현재 탭의 YouTube iframe 화면을 우선 선택해 캡처 분석합니다.</div>
         </div>
 
         <div id="status">⏳ 모듈 준비 중...</div>
@@ -377,6 +383,18 @@
                 </div>
                 <div id="youtubeError" style="display:none; color:#ef4444; font-size:12px; margin-top:4px;"></div>
             </div>
+
+            <!-- [Case 4] YouTube Capture -->
+            <div class="selection-card">
+                <h3><span>04</span> YouTube Capture</h3>
+                <p>화면은 YouTube iframe으로 보여주고, [로드] 클릭 시 현재 탭 캡처가 자동으로 시작됩니다. iPhone/iPad는 지원하지 않습니다.</p>
+                <div class="input-row">
+                    <input type="text" id="youtubeCaptureInput" placeholder="https://youtube.com/watch?v=..." value="https://www.youtube.com/watch?v=8a9M0lNY37s">
+                    <button class="btn-main" onclick="window.loadFromYouTubeCapture()">로드</button>
+                </div>
+                <button id="youtubeCaptureButton" class="btn-main" style="display:none; width:100%;" onclick="window.toggleCaptureAnalysis()">다시 시작 (화면 캡처)</button>
+                <div id="youtubeCaptureError" style="display:none; color:#ef4444; font-size:12px; margin-top:4px;"></div>
+            </div>
         </div>
 
         <div class="utils-panel">
@@ -388,21 +406,30 @@
 
     <!-- [LOG: 20260327_1338] 최적화 전용 캔버스 -->
     <canvas id="offscreenCanvas" style="display:none;"></canvas>
+    <video id="captureVideo" playsinline webkit-playsinline muted style="display:none;"></video>
 
     <script type="module">
         let poseLandmarker = null;
         let poseConnections = null;
         let animFrameId = null;
+        let captureFrameId = null;
         let currentDelegate = "GPU";
+        let captureStream = null;
+        let captureModeLoaded = false;
+        let captureModeActive = false;
 
         const previewWindow = document.querySelector(".preview-window");
         const mainVideo = document.getElementById("mainVideo");
+        const captureVideo = document.getElementById("captureVideo");
         const youtubeFrame = document.getElementById("youtubeFrame");
         const poseCanvas = document.getElementById("poseCanvas");
         const videoInput = document.getElementById("videoInput");
         const urlInput = document.getElementById("urlInput");
         const youtubeInput = document.getElementById("youtubeInput");
+        const youtubeCaptureInput = document.getElementById("youtubeCaptureInput");
         const youtubeError = document.getElementById("youtubeError");
+        const youtubeCaptureError = document.getElementById("youtubeCaptureError");
+        const youtubeCaptureButton = document.getElementById("youtubeCaptureButton");
         const statusEl = document.getElementById("status");
         const aiOverlay = document.getElementById("aiOverlay");
         const previewHint = document.getElementById("previewHint");
@@ -414,6 +441,46 @@
             statusEl.textContent = message;
             statusEl.style.borderColor = borderColor;
             statusEl.style.color = color;
+        }
+
+        function isIOSCaptureBlocked() {
+            const ua = navigator.userAgent || "";
+            return /iPad|iPhone|iPod/.test(ua)
+                || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        }
+
+        function supportsScreenCaptureMode() {
+            return Boolean(navigator.mediaDevices?.getDisplayMedia) && !isIOSCaptureBlocked();
+        }
+
+        function updateCaptureButton(loaded = captureModeLoaded) {
+            captureModeLoaded = loaded;
+            youtubeCaptureButton.style.display = loaded ? "block" : "none";
+            youtubeCaptureButton.textContent = captureModeActive
+                ? "분석 중지"
+                : "다시 시작 (화면 캡처)";
+            youtubeCaptureButton.disabled = !loaded || (!captureModeActive && !supportsScreenCaptureMode());
+        }
+
+        function showCaptureError(message) {
+            youtubeCaptureError.textContent = message;
+            youtubeCaptureError.style.display = "block";
+        }
+
+        function clearCaptureError() {
+            youtubeCaptureError.style.display = "none";
+        }
+
+        function getCaptureConstraints() {
+            return {
+                video: {
+                    displaySurface: "browser",
+                    preferCurrentTab: true,
+                    selfBrowserSurface: "include",
+                    surfaceSwitching: "include"
+                },
+                audio: false
+            };
         }
 
         function isYouTubeUrl(input) {
@@ -442,6 +509,29 @@
             ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
         }
 
+        function stopCaptureAnalysis({ keepIframe = false, statusMessage = "" } = {}) {
+            if (captureFrameId) {
+                cancelAnimationFrame(captureFrameId);
+                captureFrameId = null;
+            }
+            captureModeActive = false;
+            if (captureStream) {
+                captureStream.getTracks().forEach((track) => track.stop());
+                captureStream = null;
+            }
+            captureVideo.pause();
+            captureVideo.srcObject = null;
+            aiOverlay.style.display = "none";
+            ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+            if (!keepIframe) {
+                captureModeLoaded = false;
+            }
+            updateCaptureButton(keepIframe && captureModeLoaded);
+            if (statusMessage) {
+                setStatus(statusMessage, "#1e40af", "#60a5fa");
+            }
+        }
+
         function resetVideoElement() {
             mainVideo.pause();
             mainVideo.removeAttribute("src");
@@ -450,7 +540,7 @@
         }
 
         function clearYouTubePreview() {
-            previewWindow.classList.remove("youtube-mode");
+            previewWindow.classList.remove("youtube-capture-mode");
             previewHint.style.display = "none";
             if (youtubeFrame.src) {
                 youtubeFrame.src = "about:blank";
@@ -459,12 +549,19 @@
 
         function prepareAnalysisSource() {
             youtubeError.style.display = "none";
+            clearCaptureError();
+            stopCaptureAnalysis();
             clearYouTubePreview();
             stopAnalysisLoop();
             resetVideoElement();
+            updateCaptureButton(false);
         }
 
         mainVideo.onerror = () => {
+            if (mainVideo.currentSrc && mainVideo.currentSrc.includes("/api/video-stream?videoId=")) {
+                youtubeError.textContent = "YouTube 로딩에 실패했습니다. 로컬에서는 되더라도 배포 환경에서는 차단될 수 있습니다.";
+                youtubeError.style.display = "block";
+            }
             setStatus("❌ 영상 로드 실패. 링크를 확인해 주세요.", "#7f1d1d", "#ef4444");
         };
 
@@ -487,6 +584,7 @@
         // [YouTube 로드 로직] - 서버 프록시로 직접 분석
         window.loadFromYouTube = () => {
             youtubeError.style.display = "none";
+            clearCaptureError();
             const videoId = extractYouTubeId(youtubeInput.value.trim());
             if (!videoId) {
                 youtubeError.textContent = "유효한 YouTube URL 형식이 아닙니다. (watch?v=, youtu.be/ 등)";
@@ -498,6 +596,98 @@
             mainVideo.crossOrigin = "anonymous";
             mainVideo.src = `/api/video-stream?videoId=${videoId}`;
             mainVideo.load();
+        };
+
+        // [YouTube Capture 로드 로직] - 04 전용 (async: 로드와 동시에 캡처 자동 시작)
+        window.loadFromYouTubeCapture = async () => {
+            youtubeError.style.display = "none";
+            clearCaptureError();
+            const videoId = extractYouTubeId(youtubeCaptureInput.value.trim());
+            if (!videoId) {
+                showCaptureError("유효한 YouTube URL 형식이 아닙니다. (watch?v=, youtu.be/ 등)");
+                return;
+            }
+            if (!supportsScreenCaptureMode()) {
+                showCaptureError("이 기기/브라우저는 04 화면 캡처 분석을 지원하지 않습니다.");
+                setStatus("ℹ️ 이 기기에서는 04 캡처 분석이 지원되지 않습니다.", "#a16207", "#fbbf24");
+                return;
+            }
+            prepareAnalysisSource();
+            previewWindow.classList.add("youtube-capture-mode");
+            youtubeFrame.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&rel=0&enablejsapi=1`;
+            previewHint.textContent = "04는 YouTube iframe을 재생하고, 현재 탭을 캡처해 분석합니다.";
+            previewHint.style.display = "block";
+            poseCanvas.width = previewWindow.clientWidth || 640;
+            poseCanvas.height = previewWindow.clientHeight || 360;
+            updateCaptureButton(true);
+            setStatus("⏳ 화면 공유 권한을 허용해 주세요...", "#1e40af", "#60a5fa");
+
+            try {
+                captureStream = await navigator.mediaDevices.getDisplayMedia(getCaptureConstraints());
+                const [track] = captureStream.getVideoTracks();
+                if (track) {
+                    track.onended = () => {
+                        stopCaptureAnalysis({ keepIframe: true, statusMessage: "⏹️ 캡처가 종료되었습니다. 다시 시작하려면 버튼을 누르세요." });
+                    };
+                }
+                captureVideo.srcObject = captureStream;
+                captureVideo.muted = true;
+                await captureVideo.play();
+                captureModeActive = true;
+                updateCaptureButton(true);
+                aiOverlay.textContent = "🔍 인물 찾는 중...";
+                aiOverlay.style.display = "block";
+                setStatus("🎯 현재 탭 캡처 분석 중...", "#4ade80", "#4ade80");
+                stopAnalysisLoop();
+                startCaptureLoop();
+            } catch (err) {
+                const message = err?.name === "NotAllowedError"
+                    ? "화면 캡처 권한이 취소되었습니다."
+                    : `화면 캡처를 시작하지 못했습니다: ${err.message}`;
+                showCaptureError(message);
+                setStatus("❌ 화면 캡처를 시작하지 못했습니다.", "#7f1d1d", "#ef4444");
+                stopCaptureAnalysis({ keepIframe: true });
+            }
+        };
+
+        // 중지/재시작 버튼 (로드 시 자동 시작 후 중지/재시작 용도)
+        window.toggleCaptureAnalysis = async () => {
+            if (!captureModeLoaded) return;
+            if (captureModeActive) {
+                stopCaptureAnalysis({
+                    keepIframe: true,
+                    statusMessage: "⏹️ 캡처 분석을 중지했습니다. 다시 시작하려면 버튼을 누르세요."
+                });
+                return;
+            }
+            // 재시작
+            try {
+                clearCaptureError();
+                captureStream = await navigator.mediaDevices.getDisplayMedia(getCaptureConstraints());
+                const [track] = captureStream.getVideoTracks();
+                if (track) {
+                    track.onended = () => {
+                        stopCaptureAnalysis({ keepIframe: true, statusMessage: "⏹️ 캡처가 종료되었습니다. 다시 시작하려면 버튼을 누르세요." });
+                    };
+                }
+                captureVideo.srcObject = captureStream;
+                captureVideo.muted = true;
+                await captureVideo.play();
+                captureModeActive = true;
+                updateCaptureButton(true);
+                aiOverlay.textContent = "🔍 인물 찾는 중...";
+                aiOverlay.style.display = "block";
+                setStatus("🎯 현재 탭 캡처 분석 중...", "#4ade80", "#4ade80");
+                stopAnalysisLoop();
+                startCaptureLoop();
+            } catch (err) {
+                const message = err?.name === "NotAllowedError"
+                    ? "화면 캡처 권한이 취소되었습니다."
+                    : `화면 캡처를 시작하지 못했습니다: ${err.message}`;
+                showCaptureError(message);
+                setStatus("❌ 화면 캡처를 시작하지 못했습니다.", "#7f1d1d", "#ef4444");
+                stopCaptureAnalysis({ keepIframe: true });
+            }
         };
 
         // [URL 로드 로직]
@@ -589,6 +779,48 @@
             alert("빨간 사각형이 보이면 정상입니다.");
         };
 
+        function getCaptureTransform(displaySurface) {
+            const rect = previewWindow.getBoundingClientRect();
+            const iW = window.innerWidth || 1;
+            const iH = window.innerHeight || 1;
+
+            if (displaySurface === "window") {
+                const outerW = window.outerWidth || iW;
+                const outerH = window.outerHeight || iH;
+                const frameX = Math.max(0, (outerW - iW) / 2);
+                const frameY = Math.max(0, outerH - iH - frameX);
+                return {
+                    tx: (frameX + rect.left) / outerW,
+                    ty: (frameY + rect.top) / outerH,
+                    tw: rect.width / outerW,
+                    th: rect.height / outerH
+                };
+            } else if (displaySurface === "monitor") {
+                const sW = window.screen.width || iW;
+                const sH = window.screen.height || iH;
+                const outerW = window.outerWidth || iW;
+                const outerH = window.outerHeight || iH;
+                const frameX = Math.max(0, (outerW - iW) / 2);
+                const frameY = Math.max(0, outerH - iH - frameX);
+                const sX = window.screenX ?? window.screenLeft ?? 0;
+                const sY = window.screenY ?? window.screenTop ?? 0;
+                return {
+                    tx: (sX + frameX + rect.left) / sW,
+                    ty: (sY + frameY + rect.top) / sH,
+                    tw: rect.width / sW,
+                    th: rect.height / sH
+                };
+            } else {
+                // browser (tab) — 캡처 해상도와 무관하게 올바른 공식
+                return {
+                    tx: rect.left / iW,
+                    ty: rect.top / iH,
+                    tw: rect.width / iW,
+                    th: rect.height / iH
+                };
+            }
+        }
+
         function startLoop() {
             function loop() {
                 if (mainVideo.readyState >= 2 && !mainVideo.paused && poseLandmarker) {
@@ -619,6 +851,70 @@
             }
             let lastTime = -1;
             animFrameId = requestAnimationFrame(loop);
+        }
+
+        function startCaptureLoop() {
+            let lastTime = -1;
+
+            function loop() {
+                if (!captureModeActive) {
+                    return;
+                }
+
+                if (captureVideo.readyState >= 2 && poseLandmarker) {
+                    try {
+                        const now = performance.now();
+                        if (now - lastTime < 40) {
+                            captureFrameId = requestAnimationFrame(loop);
+                            return;
+                        }
+                        lastTime = now;
+
+                        // 전체 캡처를 640px 폭으로 스케일 (크롭 없음)
+                        const cw = captureVideo.videoWidth || 640;
+                        const ch = captureVideo.videoHeight || 480;
+                        const offW = 640;
+                        const offH = Math.max(1, Math.round(offW * ch / cw));
+                        offscreenCanvas.width = offW;
+                        offscreenCanvas.height = offH;
+                        offCtx.drawImage(captureVideo, 0, 0, cw, ch, 0, 0, offW, offH);
+
+                        poseCanvas.width = previewWindow.clientWidth || 640;
+                        poseCanvas.height = previewWindow.clientHeight || 360;
+                        const result = poseLandmarker.detectForVideo(offscreenCanvas, now);
+                        ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+
+                        if (result.landmarks && result.landmarks.length > 0) {
+                            // 랜드마크를 viewport 기준 [0,1] → iframe 기준 [0,1] 역변환
+                            const surface = captureStream?.getVideoTracks?.()[0]?.getSettings?.().displaySurface || "browser";
+                            const { tx, ty, tw, th } = getCaptureTransform(surface);
+                            const mapped = result.landmarks[0].map(p => ({
+                                ...p,
+                                x: (p.x - tx) / tw,
+                                y: (p.y - ty) / th
+                            }));
+                            drawPose(mapped);
+                            aiOverlay.style.display = "none";
+                        } else {
+                            aiOverlay.textContent = "🔍 인물 찾는 중...";
+                            aiOverlay.style.display = "block";
+                        }
+                    } catch (err) {
+                        showCaptureError(`04 화면 캡처 분석 중 오류가 발생했습니다: ${err.message}`);
+                        setStatus("❌ 04 화면 캡처 분석에 실패했습니다.", "#7f1d1d", "#ef4444");
+                        stopCaptureAnalysis({ keepIframe: true });
+                        console.error(err);
+                        return;
+                    }
+                }
+
+                captureFrameId = requestAnimationFrame(loop);
+            }
+
+            if (captureFrameId) {
+                cancelAnimationFrame(captureFrameId);
+            }
+            captureFrameId = requestAnimationFrame(loop);
         }
 
         function drawPose(landmarks) {
