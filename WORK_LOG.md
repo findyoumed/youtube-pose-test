@@ -37,3 +37,14 @@
 1. `taskkill` 명령어를 사용하여 3000, 3001 포트 점유 프로세스 및 모든 `node.exe` 강제 종료
 실행: `taskkill /F /IM node.exe`
 결과: ✅ 프로세스 정리 완료
+
+## [2026-03-28 19:58] Git 저장소 초기화 및 Push
+
+**LOG_ID: 20260328_1958**
+목표: Git 저장소 초기화 및 원격 푸시
+수행 작업:
+1. `git init` 및 원격 주소 `https://github.com/findyoumed/youtube-pose-test` 추가
+2. `main` 브랜치 생성 및 전체 파일 커밋
+3. 원격 브랜치와 충돌 발생 시 로컬(ours) 버전 우선 채택하여 머지 및 푸시
+실행: `git push -u origin main`
+결과: ✅ `main` 브랜치 푸시 완료
