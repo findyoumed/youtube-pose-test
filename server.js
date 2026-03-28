@@ -122,6 +122,10 @@ var PORT = Number(process.env.PORT || 3001);
 
 app.use(express.static(__dirname));
 
+app.get("/health", function (_req, res) {
+    res.status(200).json({ ok: true });
+});
+
 app.get("/api/video-stream", async function (req, res) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -212,9 +216,9 @@ app.get("/api/video-stream", async function (req, res) {
     fetchWithRedirect(parsedUrl.toString(), 0);
 });
 
-app.listen(PORT, function () {
+app.listen(PORT, "0.0.0.0", function () {
     console.log("=================================");
     console.log("Pose Test Server (youtubei.js)");
-    console.log("http://localhost:" + PORT);
+    console.log("http://0.0.0.0:" + PORT);
     console.log("=================================");
 });

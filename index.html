@@ -333,7 +333,7 @@
         </header>
 
         <div class="preview-window">
-            <video id="mainVideo" playsinline controls></video>
+            <video id="mainVideo" playsinline webkit-playsinline preload="metadata" controls></video>
             <iframe id="youtubeFrame" title="YouTube 미리보기"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
@@ -505,7 +505,7 @@
             let url = urlInput.value.trim();
             if (!url) return alert("URL을 입력해 주세요.");
             if (isYouTubeUrl(url)) {
-                setStatus("ℹ️ YouTube URL은 직접 분석할 수 없습니다. YouTube 칸은 미리보기 전용입니다.", "#a16207", "#fbbf24");
+                setStatus("ℹ️ YouTube 링크는 아래 YouTube 입력칸으로 넣어 주세요.", "#a16207", "#fbbf24");
                 return;
             }
 
