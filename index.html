@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Pose Tracker Pro v2.0</title>
+    <!-- [LOG: 20260327_1338] Premium Typography & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #020617;
+            --card: rgba(30, 41, 59, 0.7);
+            --accent: #ef4444;
+            --accent-glow: rgba(239, 68, 68, 0.3);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.08);
+        }
+
+        /* [LOG: 20260327_1440] Simplified UI System Upgrade */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        header {
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: -1px;
+            text-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        h1 span {
+            color: #fff;
+        }
+
+        header p {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+
+        .preview-window {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        #mainVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        #poseCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #aiOverlay {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            padding: 8px 16px;
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+            z-index: 20;
+            display: none;
+        }
+
+        #status {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid #1e40af;
+            color: #60a5fa;
+            margin-bottom: 8px;
+        }
+
+        .selection-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .selection-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .selection-card {
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            padding: 24px;
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            transition: transform 0.3s;
+        }
+
+        .selection-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        .selection-card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .selection-card h3 span {
+            color: var(--accent);
+            opacity: 0.8;
+        }
+
+        .selection-card p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent);
+            background: rgba(0,0,0,0.5);
+        }
+
+        .btn-main {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 20px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 10px 15px -3px var(--accent-glow);
+        }
+
+        .btn-main:hover {
+            transform: scale(1.02);
+            filter: brightness(1.1);
+        }
+
+        .file-label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px 15px;
+            border: 2px dashed rgba(255,255,255,0.1);
+            border-radius: 16px;
+            cursor: pointer;
+            transition: 0.3s;
+            text-align: center;
+        }
+
+        .file-label:hover {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        .file-label span {
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .utils-panel {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .btn-util {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-util:hover {
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, .3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>AI <span>Pose Tracker</span> Pro</h1>
+            <p>언제 어디서나, 당신의 움직임을 인공지능이 분석합니다</p>
+        </header>
+
+        <div class="preview-window">
+            <video id="mainVideo" playsinline controls></video>
+            <canvas id="poseCanvas"></canvas>
+            <div id="aiOverlay">🔍 인물 탐색 중...</div>
+        </div>
+
+        <div id="status">⏳ 모듈 준비 중...</div>
+
+        <div class="selection-grid">
+            <!-- [Case 1] 구글 드라이브 -->
+            <div class="selection-card">
+                <h3><span>01</span> 구글 드라이브</h3>
+                <p>공유 링크를 붙여넣으세요. 서버가 직접 분석을 준비합니다.</p>
+                <div class="input-row">
+                    <input type="text" id="urlInput" placeholder="https://drive.google.com/..."
+                        value="https://drive.google.com/file/d/1pgn-Edza6rW1AdpHajGdcMrethATvGUX/view?usp=sharing">
+                    <button class="btn-main" onclick="window.loadFromUrl()">분석</button>
+                </div>
+            </div>
+
+            <!-- [Case 2] 로컬 파일 -->
+            <div class="selection-card">
+                <h3><span>02</span> 로컬 영상 파일</h3>
+                <p>내 기기에 저장된 영상을 선택하세요. 브라우저에서 즉시 처리됩니다.</p>
+                <label class="file-label">
+                    <input type="file" id="videoInput" accept="video/*" style="display:none;">
+                    <div style="font-size: 24px;">📁</div>
+                    <span>분석할 영상 불러오기</span>
+                </label>
+            </div>
+
+            <!-- [Case 3] YouTube -->
+            <div class="selection-card">
+                <h3><span>03</span> YouTube</h3>
+                <p>유튜브 URL을 붙여넣으세요. Invidious 인스턴스를 통해 CORS 없이 분석합니다.</p>
+                <div class="input-row">
+                    <input type="text" id="youtubeInput" placeholder="https://youtube.com/watch?v=..." value="https://www.youtube.com/watch?v=8a9M0lNY37s">
+                    <button class="btn-main" onclick="window.loadFromYouTube()">분석</button>
+                </div>
+                <div id="youtubeError" style="display:none; color:#ef4444; font-size:12px; margin-top:4px;"></div>
+            </div>
+        </div>
+
+        <div class="utils-panel">
+            <button class="btn-util" onclick="window.toggleHardware()">⚙️ 가속 모드 변경</button>
+            <button class="btn-util" onclick="window.testCanvas()">🛠️ 화면 테스트</button>
+        </div>
+    </div>
+
+
+    <!-- [LOG: 20260327_1338] 최적화 전용 캔버스 -->
+    <canvas id="offscreenCanvas" style="display:none;"></canvas>
+
+    <script type="module">
+        let poseLandmarker = null;
+        let poseConnections = null;
+        let animFrameId = null;
+
+        const mainVideo = document.getElementById("mainVideo");
+        const poseCanvas = document.getElementById("poseCanvas");
+        const videoInput = document.getElementById("videoInput");
+        const urlInput = document.getElementById("urlInput");
+        const youtubeInput = document.getElementById("youtubeInput");
+        const youtubeError = document.getElementById("youtubeError");
+        const statusEl = document.getElementById("status");
+        const aiOverlay = document.getElementById("aiOverlay");
+        const ctx = poseCanvas.getContext("2d");
+        const offscreenCanvas = document.getElementById("offscreenCanvas");
+        const offCtx = offscreenCanvas.getContext("2d");
+
+        // [YouTube ID 추출 헬퍼]
+        function extractYouTubeId(input) {
+            const patterns = [
+                /[?&]v=([A-Za-z0-9_-]{11})/,
+                /youtu\.be\/([A-Za-z0-9_-]{11})/,
+                /shorts\/([A-Za-z0-9_-]{11})/,
+                /embed\/([A-Za-z0-9_-]{11})/,
+                /^([A-Za-z0-9_-]{11})$/
+            ];
+            for (const p of patterns) {
+                const m = input.match(p);
+                if (m) return m[1];
+            }
+            return null;
+        }
+
+        // [YouTube 로드 로직]
+        window.loadFromYouTube = () => {
+            youtubeError.style.display = "none";
+            const input = youtubeInput.value.trim();
+            if (!input) return alert("YouTube URL을 입력해 주세요.");
+
+            const videoId = extractYouTubeId(input);
+            if (!videoId) {
+                youtubeError.textContent = "유효한 YouTube URL 형식이 아닙니다. (watch?v=, youtu.be/ 등)";
+                youtubeError.style.display = "block";
+                return;
+            }
+
+            statusEl.innerHTML = '<span class="spinner"></span> YouTube 영상 로딩 중...';
+            statusEl.style.borderColor = "#1e40af";
+            statusEl.style.color = "#60a5fa";
+
+            mainVideo.crossOrigin = "anonymous";
+            mainVideo.src = `/api/video-stream?videoId=${videoId}`;
+            mainVideo.load();
+
+            mainVideo.onerror = () => {
+                statusEl.textContent = "❌ YouTube 영상 로드 실패.";
+                statusEl.style.color = "#ef4444";
+                youtubeError.textContent = "영상을 불러오지 못했습니다. 다른 URL을 시도하거나 잠시 후 다시 시도해 주세요.";
+                youtubeError.style.display = "block";
+            };
+        };
+
+        // [URL 로드 로직]
+        window.loadFromUrl = () => {
+            let url = urlInput.value.trim();
+            if (!url) return alert("URL을 입력해 주세요.");
+            statusEl.innerHTML = '<span class="spinner"></span> 외부 영상 로딩 중...';
+
+            if (url.includes("drive.google.com")) {
+                const match = url.match(/\/d\/([^/]+)/) || url.match(/id=([^&]+)/);
+                if (match && match[1]) url = `https://drive.google.com/uc?export=download&id=${match[1]}`;
+            }
+            // [로그: 20260327_1345] CORS 및 403 차단을 피하기 위해 서버 프록시 사용
+            const proxyUrl = `/api/video-stream?url=${encodeURIComponent(url)}`;
+            console.log("Loading via proxy:", proxyUrl);
+
+            mainVideo.crossOrigin = "anonymous";
+            mainVideo.src = proxyUrl;
+            mainVideo.load();
+            mainVideo.onerror = () => {
+                statusEl.textContent = "❌ 영상 로드 실패. 링크를 확인해 주세요.";
+                statusEl.style.color = "#ef4444";
+            };
+        };
+
+        // [파일 선택 로직]
+        videoInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            mainVideo.crossOrigin = null;
+            mainVideo.src = URL.createObjectURL(file);
+            mainVideo.load();
+            statusEl.innerHTML = '<span class="spinner"></span> 영상 로드 중...';
+        });
+
+        // [공통 로드 완료]
+        mainVideo.onloadeddata = () => {
+            if (!mainVideo.src) return;
+            poseCanvas.width = mainVideo.videoWidth;
+            poseCanvas.height = mainVideo.videoHeight;
+            offscreenCanvas.width = 640;
+            offscreenCanvas.height = 480;
+
+            statusEl.textContent = "✅ 로드 완료. 재생을 눌러 분석을 시작하세요!";
+            statusEl.style.borderColor = "#4ade80";
+            statusEl.style.color = "#4ade80";
+
+            if (animFrameId) cancelAnimationFrame(animFrameId);
+            startLoop();
+            mainVideo.play().catch(() => { });
+        };
+
+        // [AI 초기화]
+        async function initAI(delegateType = "GPU") {
+            try {
+                if (poseLandmarker) { await poseLandmarker.close(); poseLandmarker = null; }
+                statusEl.innerHTML = `<span class="spinner"></span> AI 로딩(${delegateType})...`;
+                const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
+                const resolver = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
+                poseLandmarker = await vision.PoseLandmarker.createFromOptions(resolver, {
+                    baseOptions: {
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+                        delegate: delegateType
+                    },
+                    runningMode: "VIDEO", numPoses: 1
+                });
+                poseConnections = vision.PoseLandmarker.POSE_CONNECTIONS;
+                statusEl.textContent = `✅ AI (${delegateType} 모드) 준비 완료!`;
+            } catch (e) {
+                statusEl.textContent = `❌ AI 로드 실패 (${delegateType})`;
+                console.error(e);
+            }
+        }
+
+        window.toggleHardware = async () => {
+            const current = statusEl.textContent.includes("GPU") ? "CPU" : "GPU";
+            await initAI(current);
+        };
+
+        window.testCanvas = () => {
+            ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 10;
+            ctx.strokeRect(20, 20, poseCanvas.width - 40, poseCanvas.height - 40);
+            alert("빨간 사각형이 보이면 정상입니다.");
+        };
+
+        function startLoop() {
+            function loop() {
+                if (mainVideo.readyState >= 2 && !mainVideo.paused && poseLandmarker) {
+                    try {
+                        const now = performance.now();
+                        if (now - lastTime < 40) { animFrameId = requestAnimationFrame(loop); return; }
+                        lastTime = now;
+                        offCtx.drawImage(mainVideo, 0, 0, 640, 480);
+                        const result = poseLandmarker.detectForVideo(offscreenCanvas, now);
+                        ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+                        if (result.landmarks && result.landmarks.length > 0) {
+                            drawPose(result.landmarks[0]);
+                            aiOverlay.style.display = "none";
+                        } else {
+                            aiOverlay.textContent = "🔍 인물 찾는 중...";
+                            aiOverlay.style.display = "block";
+                        }
+                    } catch (err) {
+                        if (err.name === "SecurityError") {
+                            cancelAnimationFrame(animFrameId);
+                            statusEl.textContent = "❌ Canvas 보안 오류: 이 영상은 CORS 정책으로 분석할 수 없습니다.";
+                            statusEl.style.color = "#ef4444";
+                            youtubeError.textContent = "이 영상은 CORS 정책에 의해 차단되었습니다. 다른 URL을 시도해 주세요.";
+                            youtubeError.style.display = "block";
+                        }
+                        console.error(err);
+                    }
+                }
+                lastTime = performance.now();
+                animFrameId = requestAnimationFrame(loop);
+            }
+            let lastTime = -1;
+            animFrameId = requestAnimationFrame(loop);
+        }
+
+        function drawPose(landmarks) {
+            ctx.save();
+            ctx.strokeStyle = "#4ade80";
+            ctx.lineWidth = 4;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "rgba(74, 222, 128, 0.5)";
+            let detectedCount = 0;
+            poseConnections.forEach(c => {
+                const s = landmarks[c.start], e = landmarks[c.end];
+                ctx.beginPath();
+                ctx.moveTo(s.x * poseCanvas.width, s.y * poseCanvas.height);
+                ctx.lineTo(e.x * poseCanvas.width, e.y * poseCanvas.height);
+                ctx.stroke();
+            });
+            landmarks.forEach((p, idx) => {
+                if (p.visibility > 0.2) detectedCount++;
+                ctx.beginPath();
+                ctx.arc(p.x * poseCanvas.width, p.y * poseCanvas.height, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = (p.visibility > 0.5) ? "#ef4444" : "#3b82f6";
+                ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+            ctx.restore();
+        }
+
+        initAI();
+    </script>
+</body>
+
+</html>
