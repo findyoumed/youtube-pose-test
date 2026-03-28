@@ -92,13 +92,30 @@
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
-        #mainVideo {
+        #mainVideo,
+        #youtubeFrame {
             width: 100%;
             height: 100%;
             object-fit: contain;
+            background: #000;
         }
 
-#poseCanvas {
+        #youtubeFrame {
+            border: 0;
+            display: none;
+        }
+
+        .preview-window.youtube-mode #mainVideo,
+        .preview-window.youtube-mode #poseCanvas,
+        .preview-window.youtube-mode #aiOverlay {
+            display: none;
+        }
+
+        .preview-window.youtube-mode #youtubeFrame {
+            display: block;
+        }
+
+        #poseCanvas {
             position: absolute;
             top: 0;
             left: 0;
@@ -120,6 +137,23 @@
             font-weight: 600;
             color: #4ade80;
             border: 1px solid rgba(74, 222, 128, 0.3);
+            z-index: 20;
+            display: none;
+        }
+
+        #previewHint {
+            position: absolute;
+            left: 15px;
+            right: 15px;
+            bottom: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #f8fafc;
+            border: 1px solid rgba(251, 191, 36, 0.35);
             z-index: 20;
             display: none;
         }
@@ -300,8 +334,12 @@
 
         <div class="preview-window">
             <video id="mainVideo" playsinline controls></video>
+            <iframe id="youtubeFrame" title="YouTube 미리보기"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
             <canvas id="poseCanvas"></canvas>
             <div id="aiOverlay">🔍 인물 탐색 중...</div>
+            <div id="previewHint">YouTube는 현재 미리보기만 지원합니다. 분석하려면 파일, Google Drive 다운로드 링크, 또는 CORS 허용 MP4 URL을 사용하세요.</div>
         </div>
 
         <div id="status">⏳ 모듈 준비 중...</div>
@@ -332,10 +370,10 @@
             <!-- [Case 3] YouTube -->
             <div class="selection-card">
                 <h3><span>03</span> YouTube</h3>
-                <p>유튜브 URL을 붙여넣으세요. 서버를 통해 CORS 없이 분석합니다.</p>
+                <p>유튜브 URL은 현재 같은 페이지에서 미리보기만 지원합니다. 분석은 파일 또는 다운로드 가능한 영상 링크로만 동작합니다.</p>
                 <div class="input-row">
                     <input type="text" id="youtubeInput" placeholder="https://youtube.com/watch?v=..." value="https://www.youtube.com/watch?v=8a9M0lNY37s">
-                    <button class="btn-main" onclick="window.loadFromYouTube()">분석</button>
+                    <button class="btn-main" onclick="window.loadFromYouTube()">미리보기</button>
                 </div>
                 <div id="youtubeError" style="display:none; color:#ef4444; font-size:12px; margin-top:4px;"></div>
             </div>
@@ -355,8 +393,11 @@
         let poseLandmarker = null;
         let poseConnections = null;
         let animFrameId = null;
+        let currentDelegate = "GPU";
 
+        const previewWindow = document.querySelector(".preview-window");
         const mainVideo = document.getElementById("mainVideo");
+        const youtubeFrame = document.getElementById("youtubeFrame");
         const poseCanvas = document.getElementById("poseCanvas");
         const videoInput = document.getElementById("videoInput");
         const urlInput = document.getElementById("urlInput");
@@ -364,9 +405,68 @@
         const youtubeError = document.getElementById("youtubeError");
         const statusEl = document.getElementById("status");
         const aiOverlay = document.getElementById("aiOverlay");
+        const previewHint = document.getElementById("previewHint");
         const ctx = poseCanvas.getContext("2d");
         const offscreenCanvas = document.getElementById("offscreenCanvas");
         const offCtx = offscreenCanvas.getContext("2d");
+
+        function setStatus(message, borderColor = "#1e40af", color = "#60a5fa") {
+            statusEl.textContent = message;
+            statusEl.style.borderColor = borderColor;
+            statusEl.style.color = color;
+        }
+
+        function isYouTubeUrl(input) {
+            try {
+                const parsed = new URL(input);
+                const host = parsed.hostname.toLowerCase();
+                return host === "youtu.be"
+                    || host.endsWith(".youtu.be")
+                    || host === "youtube.com"
+                    || host.endsWith(".youtube.com")
+                    || host === "youtube-nocookie.com"
+                    || host.endsWith(".youtube-nocookie.com")
+                    || host === "googlevideo.com"
+                    || host.endsWith(".googlevideo.com");
+            } catch {
+                return /youtu\.?be|youtube\.com|googlevideo\.com/i.test(input);
+            }
+        }
+
+        function stopAnalysisLoop() {
+            if (animFrameId) {
+                cancelAnimationFrame(animFrameId);
+                animFrameId = null;
+            }
+            aiOverlay.style.display = "none";
+            ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+        }
+
+        function resetVideoElement() {
+            mainVideo.pause();
+            mainVideo.removeAttribute("src");
+            mainVideo.load();
+            mainVideo.crossOrigin = null;
+        }
+
+        function clearYouTubePreview() {
+            previewWindow.classList.remove("youtube-mode");
+            previewHint.style.display = "none";
+            if (youtubeFrame.src) {
+                youtubeFrame.src = "about:blank";
+            }
+        }
+
+        function prepareAnalysisSource() {
+            youtubeError.style.display = "none";
+            clearYouTubePreview();
+            stopAnalysisLoop();
+            resetVideoElement();
+        }
+
+        mainVideo.onerror = () => {
+            setStatus("❌ 영상 로드 실패. 링크를 확인해 주세요.", "#7f1d1d", "#ef4444");
+        };
 
         // [YouTube ID 추출 헬퍼]
         function extractYouTubeId(input) {
@@ -394,24 +494,23 @@
                 youtubeError.style.display = "block";
                 return;
             }
-            statusEl.innerHTML = '<span class="spinner"></span> YouTube 영상 로딩 중...';
-            statusEl.style.borderColor = "#1e40af";
-            statusEl.style.color = "#60a5fa";
-            mainVideo.crossOrigin = "anonymous";
-            mainVideo.src = `/api/video-stream?videoId=${videoId}`;
-            mainVideo.load();
-            mainVideo.onerror = () => {
-                statusEl.textContent = "❌ YouTube 영상 로드 실패.";
-                statusEl.style.color = "#ef4444";
-                youtubeError.textContent = "영상을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
-                youtubeError.style.display = "block";
-            };
+            prepareAnalysisSource();
+            previewWindow.classList.add("youtube-mode");
+            previewHint.style.display = "block";
+            youtubeFrame.src = `https://www.youtube.com/embed/${videoId}?playsinline=1&rel=0`;
+            setStatus("ℹ️ YouTube는 현재 미리보기만 지원합니다. 분석하려면 파일, Drive 다운로드 링크, 또는 MP4 URL을 사용하세요.", "#a16207", "#fbbf24");
         };
 
         // [URL 로드 로직]
         window.loadFromUrl = () => {
             let url = urlInput.value.trim();
             if (!url) return alert("URL을 입력해 주세요.");
+            if (isYouTubeUrl(url)) {
+                setStatus("ℹ️ YouTube URL은 직접 분석할 수 없습니다. YouTube 칸은 미리보기 전용입니다.", "#a16207", "#fbbf24");
+                return;
+            }
+
+            prepareAnalysisSource();
             statusEl.innerHTML = '<span class="spinner"></span> 외부 영상 로딩 중...';
 
             if (url.includes("drive.google.com")) {
@@ -425,16 +524,13 @@
             mainVideo.crossOrigin = "anonymous";
             mainVideo.src = proxyUrl;
             mainVideo.load();
-            mainVideo.onerror = () => {
-                statusEl.textContent = "❌ 영상 로드 실패. 링크를 확인해 주세요.";
-                statusEl.style.color = "#ef4444";
-            };
         };
 
         // [파일 선택 로직]
         videoInput.addEventListener("change", (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            prepareAnalysisSource();
             mainVideo.crossOrigin = null;
             mainVideo.src = URL.createObjectURL(file);
             mainVideo.load();
@@ -443,17 +539,15 @@
 
         // [공통 로드 완료]
         mainVideo.onloadeddata = () => {
-            if (!mainVideo.src) return;
+            if (!mainVideo.currentSrc || previewWindow.classList.contains("youtube-mode")) return;
             poseCanvas.width = mainVideo.videoWidth;
             poseCanvas.height = mainVideo.videoHeight;
             offscreenCanvas.width = 640;
             offscreenCanvas.height = 480;
 
-            statusEl.textContent = "✅ 로드 완료. 재생을 눌러 분석을 시작하세요!";
-            statusEl.style.borderColor = "#4ade80";
-            statusEl.style.color = "#4ade80";
+            setStatus("✅ 로드 완료. 재생을 눌러 분석을 시작하세요!", "#4ade80", "#4ade80");
 
-            if (animFrameId) cancelAnimationFrame(animFrameId);
+            stopAnalysisLoop();
             startLoop();
             mainVideo.play().catch(() => { });
         };
@@ -461,6 +555,7 @@
         // [AI 초기화]
         async function initAI(delegateType = "GPU") {
             try {
+                currentDelegate = delegateType;
                 if (poseLandmarker) { await poseLandmarker.close(); poseLandmarker = null; }
                 statusEl.innerHTML = `<span class="spinner"></span> AI 로딩(${delegateType})...`;
                 const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0");
@@ -473,15 +568,17 @@
                     runningMode: "VIDEO", numPoses: 1
                 });
                 poseConnections = vision.PoseLandmarker.POSE_CONNECTIONS;
-                statusEl.textContent = `✅ AI (${delegateType} 모드) 준비 완료!`;
+                if (!previewWindow.classList.contains("youtube-mode") && !mainVideo.currentSrc) {
+                    setStatus(`✅ AI (${delegateType} 모드) 준비 완료!`, "#4ade80", "#4ade80");
+                }
             } catch (e) {
-                statusEl.textContent = `❌ AI 로드 실패 (${delegateType})`;
+                setStatus(`❌ AI 로드 실패 (${delegateType})`, "#7f1d1d", "#ef4444");
                 console.error(e);
             }
         }
 
         window.toggleHardware = async () => {
-            const current = statusEl.textContent.includes("GPU") ? "CPU" : "GPU";
+            const current = currentDelegate === "GPU" ? "CPU" : "GPU";
             await initAI(current);
         };
 
@@ -512,11 +609,8 @@
                         }
                     } catch (err) {
                         if (err.name === "SecurityError") {
-                            cancelAnimationFrame(animFrameId);
-                            statusEl.textContent = "❌ Canvas 보안 오류: 이 영상은 CORS 정책으로 분석할 수 없습니다.";
-                            statusEl.style.color = "#ef4444";
-                            youtubeError.textContent = "이 영상은 CORS 정책에 의해 차단되었습니다. 다른 URL을 시도해 주세요.";
-                            youtubeError.style.display = "block";
+                            stopAnalysisLoop();
+                            setStatus("❌ Canvas 보안 오류: 이 영상은 CORS 정책으로 분석할 수 없습니다.", "#7f1d1d", "#ef4444");
                         }
                         console.error(err);
                     }
