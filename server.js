@@ -1,4 +1,4 @@
-import { Innertube } from 'youtubei.js';
+import { Innertube, Platform, UniversalCache } from 'youtubei.js';
 import { Readable } from 'stream';
 import express from "express";
 import https from "https";
@@ -8,9 +8,67 @@ import { dirname } from "path";
 
 // 모듈 레벨 캐시 (warm request에서 재사용)
 var ytInstance = null;
+var evaluatorInstalled = false;
+var YT_DOWNLOAD_CLIENTS = ['ANDROID', 'TV', 'IOS', 'WEB'];
+
+function installYoutubeJsEvaluator() {
+    if (evaluatorInstalled) return;
+
+    Platform.shim.eval = async function (data, env) {
+        var properties = [];
+
+        if (env.n) {
+            properties.push(`n: exportedVars.nFunction(${JSON.stringify(env.n)})`);
+        }
+
+        if (env.sig) {
+            properties.push(`sig: exportedVars.sigFunction(${JSON.stringify(env.sig)})`);
+        }
+
+        if (properties.length === 0) {
+            return {};
+        }
+
+        var code = `${data.output}\nreturn { ${properties.join(', ')} }`;
+        return new Function(code)();
+    };
+
+    evaluatorInstalled = true;
+}
+
 async function getInnertube() {
-    if (!ytInstance) ytInstance = await Innertube.create({ retrieve_player: true });
+    installYoutubeJsEvaluator();
+    if (!ytInstance) {
+        ytInstance = await Innertube.create({
+            retrieve_player: true,
+            cache: new UniversalCache(false)
+        });
+    }
     return ytInstance;
+}
+
+async function getYouTubeDownloadStream(videoId) {
+    var yt = await getInnertube();
+    var lastError = null;
+
+    for (const client of YT_DOWNLOAD_CLIENTS) {
+        try {
+            console.log(`🎬 youtubei.js downloading: ${videoId} via ${client}`);
+            const stream = await yt.download(videoId, {
+                type: 'video+audio',
+                quality: '360p',
+                format: 'mp4',
+                client
+            });
+            console.log(`✅ youtubei.js 스트림 획득: ${client}`);
+            return { stream, client };
+        } catch (error) {
+            lastError = error;
+            console.error(`⚠️ youtubei.js client ${client} 실패:`, error?.message || String(error));
+        }
+    }
+
+    throw lastError || new Error("No YouTube client could fetch a playable stream.");
 }
 
 function extractYouTubeId(input) {
@@ -60,7 +118,7 @@ var __filename = fileURLToPath(import.meta.url);
 var __dirname = dirname(__filename);
 
 var app = express();
-var PORT = 3001;
+var PORT = Number(process.env.PORT || 3001);
 
 app.use(express.static(__dirname));
 
@@ -77,12 +135,8 @@ app.get("/api/video-stream", async function (req, res) {
         if (!id) { sendJsonError(res, 400, "Invalid videoId"); return; }
 
         try {
-            console.log("🎬 youtubei.js downloading:", id);
-            var yt = await getInnertube();
-
-            // yt.download()는 내부적으로 &cpn= 추가 + 세션 인증 fetch 사용 → 403 없음
-            const stream = await yt.download(id, { type: 'video+audio', quality: '360p', format: 'mp4' });
-            console.log("✅ youtubei.js 스트림 획득, piping...");
+            const { stream, client } = await getYouTubeDownloadStream(id);
+            console.log(`📡 youtubei.js piping via ${client}`);
 
             res.status(200);
             res.setHeader("Content-Type", "video/mp4");
@@ -91,8 +145,9 @@ app.get("/api/video-stream", async function (req, res) {
             req.on("close", function() { res.destroy(); });
 
         } catch(e) {
-            console.error("❌ youtubei.js 실패:", e.message);
-            if (!res.headersSent) sendJsonError(res, 502, e.message);
+            var message = e?.message || String(e);
+            console.error("❌ youtubei.js 실패:", e);
+            if (!res.headersSent) sendJsonError(res, 502, message);
         }
         return;
     }
