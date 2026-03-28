@@ -1,4 +1,4 @@
-// [LOG: 20260328] Universal Video/CORS Proxy + YouTube via Invidious + Cobalt fallback
+// [LOG: 20260328] Universal Video/CORS Proxy + YouTube (Invidious + Piped + Cobalt)
 import fetch from "node-fetch";
 
 function extractYouTubeId(input) {
@@ -24,23 +24,32 @@ const INVIDIOUS_INSTANCES = [
     "https://vid.puffyan.us"
 ];
 
-async function getYouTubeStreamUrl(videoId) {
-    const tryInstance = async (instance) => {
-        const res = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-            headers: { "User-Agent": "Mozilla/5.0" },
-            signal: AbortSignal.timeout(4000)
-        });
-        if (!res.ok) throw new Error(`${res.status}`);
-        const data = await res.json();
-        // formatStreams = muxed video+audio (직접 재생 가능)
-        // itag 18 = 360p MP4, itag 22 = 720p MP4
-        const stream = data.formatStreams?.find(f => String(f.itag) === "18")
-                    || data.formatStreams?.find(f => String(f.itag) === "22")
-                    || data.formatStreams?.[0];
-        if (!stream?.url) throw new Error("no stream url");
-        return stream.url;
-    };
-    return Promise.any(INVIDIOUS_INSTANCES.map(tryInstance)).catch(() => null);
+async function tryInvidious(instance, videoId) {
+    const res = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: AbortSignal.timeout(4000)
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data = await res.json();
+    const stream = data.formatStreams?.find(f => String(f.itag) === "18")
+                || data.formatStreams?.find(f => String(f.itag) === "22")
+                || data.formatStreams?.[0];
+    if (!stream?.url) throw new Error("no stream url");
+    return stream.url;
+}
+
+async function getYouTubeUrlViaPiped(videoId) {
+    const res = await fetch(`https://pipedapi.kavin.rocks/streams/${videoId}`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: AbortSignal.timeout(4000)
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data = await res.json();
+    const s = data.videoStreams?.find(s => s.quality === "360p" && s.mimeType?.includes("mp4"))
+            || data.videoStreams?.find(s => s.mimeType?.includes("mp4"))
+            || data.videoStreams?.[0];
+    if (!s?.url) throw new Error("no stream url");
+    return s.url;
 }
 
 async function getYouTubeUrlViaCobalt(videoId) {
@@ -55,11 +64,11 @@ async function getYouTubeUrlViaCobalt(videoId) {
                 url: `https://www.youtube.com/watch?v=${videoId}`,
                 videoQuality: "360"
             }),
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(3000)
         });
         if (!res.ok) return null;
         const data = await res.json();
-        if ((data.status === "redirect" || data.status === "stream") && data.url) {
+        if (["redirect", "stream", "tunnel"].includes(data.status) && data.url) {
             return data.url;
         }
         return null;
@@ -68,24 +77,51 @@ async function getYouTubeUrlViaCobalt(videoId) {
     }
 }
 
+async function resolveYouTubeUrl(videoId) {
+    // 1차: Invidious 5개 + Piped 병렬 시도 (4초 타임아웃)
+    const tries = [
+        ...INVIDIOUS_INSTANCES.map(inst => tryInvidious(inst, videoId)),
+        getYouTubeUrlViaPiped(videoId)
+    ];
+    const url = await Promise.any(tries).catch(() => null);
+    if (url) return url;
+
+    // 2차: Cobalt fallback (3초 타임아웃)
+    console.log("⚠️ Invidious+Piped 모두 실패 → Cobalt fallback...");
+    return getYouTubeUrlViaCobalt(videoId);
+}
+
 export default async function handler(req, res) {
     const { videoId, url } = req.query;
 
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Range");
     if (req.method === "OPTIONS") return res.status(200).end();
 
-    // [Case 1] 일반 URL 프록시 (Google Drive 등 CORS 해결용)
+    // [Case 1] URL 프록시 (Google Drive, YouTube 스트림 등) - Range 지원
     if (url) {
         try {
-            console.log(`📡 Proxying URL: ${url}`);
-            const response = await fetch(url, {
-                headers: { "User-Agent": "Mozilla/5.0" }
-            });
+            console.log(`📡 Proxying URL: ${url.substring(0, 80)}...`);
+            const upstreamHeaders = { "User-Agent": "Mozilla/5.0" };
+            if (req.headers.range) {
+                upstreamHeaders["Range"] = req.headers.range;
+            }
 
-            if (!response.ok) throw new Error(`Remote server responded with ${response.status}`);
+            const response = await fetch(url, { headers: upstreamHeaders });
 
+            if (!response.ok && response.status !== 206) {
+                throw new Error(`Upstream responded with ${response.status}`);
+            }
+
+            res.status(response.status);
             res.setHeader("Content-Type", response.headers.get("content-type") || "video/mp4");
+            const cl = response.headers.get("content-length");
+            if (cl) res.setHeader("Content-Length", cl);
+            const cr = response.headers.get("content-range");
+            if (cr) res.setHeader("Content-Range", cr);
+            res.setHeader("Accept-Ranges", response.headers.get("accept-ranges") || "bytes");
+
             return response.body.pipe(res);
         } catch (e) {
             console.error("Proxy error:", e.message);
@@ -93,29 +129,23 @@ export default async function handler(req, res) {
         }
     }
 
-    // [Case 2] YouTube: Invidious → Cobalt 순으로 시도
+    // [Case 2] YouTube: URL 획득 후 자체 프록시로 redirect (CORS 보장)
     if (videoId) {
         const id = extractYouTubeId(videoId);
         if (!id) return res.status(400).json({ error: "유효하지 않은 YouTube videoId입니다" });
 
         console.log(`🎬 Resolving YouTube: ${id}`);
-
-        // 1차: Invidious (병렬)
-        let streamUrl = await getYouTubeStreamUrl(id);
-
-        // 2차: Cobalt fallback
-        if (!streamUrl) {
-            console.log("⚠️ Invidious 실패 → Cobalt fallback...");
-            streamUrl = await getYouTubeUrlViaCobalt(id);
-        }
+        const streamUrl = await resolveYouTubeUrl(id);
 
         if (!streamUrl) {
-            return res.status(502).json({ error: "YouTube 스트림 URL 획득 실패 (Invidious + Cobalt 모두 실패)" });
+            return res.status(502).json({ error: "YouTube 스트림 URL 획득 실패 (Invidious/Piped/Cobalt 모두 실패)" });
         }
 
-        console.log(`✅ Redirecting to: ${streamUrl.substring(0, 80)}...`);
+        // 외부 URL이 아닌 자체 프록시로 redirect → CORS 완전 보장
+        console.log(`✅ Proxying via self: ${streamUrl.substring(0, 80)}...`);
+        const selfProxy = `/api/video-stream?url=${encodeURIComponent(streamUrl)}`;
         res.setHeader("Cache-Control", "no-store");
-        return res.redirect(302, streamUrl);
+        return res.redirect(302, selfProxy);
     }
 
     return res.status(400).json({ error: "url 또는 videoId 파라미터가 필요합니다" });
