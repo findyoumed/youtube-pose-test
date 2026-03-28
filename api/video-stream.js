@@ -1,5 +1,6 @@
-// [LOG: 20260328] Universal Video/CORS Proxy + YouTube (Invidious + Piped + Cobalt)
+// [LOG: 20260328] Universal Video/CORS Proxy + YouTube (ytdl-core + Invidious + Piped + Cobalt)
 import fetch from "node-fetch";
+import ytdl from "@distube/ytdl-core";
 
 function extractYouTubeId(input) {
     const patterns = [
@@ -77,8 +78,28 @@ async function getYouTubeUrlViaCobalt(videoId) {
     }
 }
 
+async function resolveYouTubeViaYtdl(videoId) {
+    const info = await ytdl.getInfo(videoId);
+    const formats = info.formats;
+    // itag 18 (360p mp4 combined) 우선, 없으면 audioandvideo mp4, 없으면 video-only mp4
+    const format = formats.find(f => f.itag === 18)
+                || formats.find(f => f.hasVideo && f.hasAudio && f.container === "mp4")
+                || formats.find(f => f.hasVideo && f.container === "mp4");
+    if (!format?.url) throw new Error("no format found");
+    console.log(`✅ ytdl-core 성공: itag=${format.itag} ${format.qualityLabel || ""}`);
+    return format.url;
+}
+
 async function resolveYouTubeUrl(videoId) {
-    // 1차: Invidious 5개 + Piped 병렬 시도 (4초 타임아웃)
+    // 1차: ytdl-core (YouTube InnerTube API 직접)
+    try {
+        const url = await resolveYouTubeViaYtdl(videoId);
+        if (url) return url;
+    } catch (e) {
+        console.log("⚠️ ytdl-core 실패:", e.message.substring(0, 100));
+    }
+
+    // 2차: Invidious 5개 + Piped 병렬 시도 (4초 타임아웃)
     const tries = [
         ...INVIDIOUS_INSTANCES.map(inst => tryInvidious(inst, videoId)),
         getYouTubeUrlViaPiped(videoId)
@@ -86,7 +107,7 @@ async function resolveYouTubeUrl(videoId) {
     const url = await Promise.any(tries).catch(() => null);
     if (url) return url;
 
-    // 2차: Cobalt fallback (3초 타임아웃)
+    // 3차: Cobalt fallback (3초 타임아웃)
     console.log("⚠️ Invidious+Piped 모두 실패 → Cobalt fallback...");
     return getYouTubeUrlViaCobalt(videoId);
 }
