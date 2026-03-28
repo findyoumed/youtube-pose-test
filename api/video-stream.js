@@ -1,4 +1,5 @@
 import { Innertube } from 'youtubei.js';
+import { Readable } from 'stream';
 import https from 'https';
 import http from 'http';
 
@@ -82,47 +83,18 @@ export default async function handler(req, res) {
         if (!id) { res.status(400).json({ error: 'Invalid videoId' }); return; }
 
         try {
-            console.log('🎬 youtubei.js resolving:', id);
+            console.log('🎬 youtubei.js downloading:', id);
             const yt = await getInnertube();
 
-            // WEB 클라이언트 (로컬/서버 모두 작동 확인)
-            const info = await yt.getBasicInfo(id, 'WEB');
-            const formats = [
-                ...(info.streaming_data?.formats || []),
-                ...(info.streaming_data?.adaptive_formats || [])
-            ];
+            // yt.download()는 내부적으로 &cpn= 추가 + 세션 인증 fetch 사용 → 403 없음
+            const stream = await yt.download(id, { type: 'video+audio', quality: '360p', format: 'mp4' });
+            console.log('✅ youtubei.js 스트림 획득, piping...');
 
-            // itag 18 = 360p mp4 (video+audio combined) 우선
-            const format = formats.find(f => f.itag === 18)
-                        || formats.find(f => f.mime_type?.includes('video/mp4') && f.has_audio && f.has_video)
-                        || formats[0];
-
-            if (!format) throw new Error('No suitable format found');
-
-            // signatureCipher + nsig 자동 복호화
-            const streamUrl = format.decipher(yt.session.player);
-            console.log('✅ youtubei.js 성공, streaming...');
-
-            // 스트리밍 프록시 (첫 바이트 전송 후 Vercel timeout 미적용)
-            https.get(streamUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Referer': 'https://www.youtube.com/',
-                    'Accept': '*/*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Dest': 'video'
-                }
-            }, (upstream) => {
-                res.status(upstream.statusCode || 200);
-                res.setHeader('Content-Type', upstream.headers['content-type'] || 'video/mp4');
-                res.setHeader('Accept-Ranges', 'bytes');
-                if (upstream.headers['content-length']) res.setHeader('Content-Length', upstream.headers['content-length']);
-                upstream.pipe(res);
-                req.on('close', () => upstream.destroy());
-            }).on('error', (e) => {
-                if (!res.headersSent) res.status(500).json({ error: e.message });
-            });
+            res.status(200);
+            res.setHeader('Content-Type', 'video/mp4');
+            res.setHeader('Accept-Ranges', 'bytes');
+            Readable.fromWeb(stream).pipe(res);
+            req.on('close', () => res.destroy());
 
         } catch (e) {
             console.error('❌ youtubei.js 실패:', e.message);
